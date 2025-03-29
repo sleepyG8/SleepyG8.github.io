@@ -91,5 +91,28 @@
     <footer>
         © 2025 Your Wiki Name
     </footer>
+
+        <script>
+        // Function to create a particle
+        function createParticle(x, y) {
+            const particle = document.createElement('div');
+            particle.className = 'cursor-trail';
+            document.body.appendChild(particle);
+
+            // Set the particle position
+            particle.style.left = `${x}px`;
+            particle.style.top = `${y}px`;
+
+            // Remove particle after animation
+            setTimeout(() => {
+                particle.remove();
+            }, 1000);
+        }
+
+        // Add event listener for mouse movement
+        document.addEventListener('mousemove', (e) => {
+            createParticle(e.pageX, e.pageY);
+        });
+    </script>
 </body>
 </html>
