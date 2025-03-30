@@ -10,6 +10,7 @@
             font-family: Arial, sans-serif;
             background-color: #f4f4f9; /* Light background color */
             color: #333; /* Dark text for readability */
+            position: relative; /* Added this */
         }
 
         header {
@@ -62,6 +63,7 @@
             left: 0;
             width: 100%;
         }
+
         .cursor-trail {
             position: absolute;
             width: 10px;
@@ -81,6 +83,18 @@
                 opacity: 0;
                 transform: scale(0.5);
             }
+        }
+
+        /* Styles for the bottom right content */
+        .bottom-right {
+            position: fixed;
+            bottom: 40px;
+            left: 1px;
+            font-size: 1.5rem; /* Adjust this to make it bigger or smaller */
+            background-color: #83a4d4;
+            padding: 5px;
+            border-radius: 5px;
+            box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2);
         }
     </style>
 </head>
@@ -112,7 +126,34 @@
         © 2025 Your Wiki Name
     </footer>
 
-        <script>
+    <div class="bottom-right">
+        <h3>Simple Calculator</h3>
+        <input type="text" id="display" disabled>
+        <br>
+        <button onclick="appendCharacter('1')">1</button>
+        <button onclick="appendCharacter('2')">2</button>
+        <button onclick="appendCharacter('3')">3</button>
+        <button onclick="appendCharacter('+')">+</button>
+        <br>
+        <button onclick="appendCharacter('4')">4</button>
+        <button onclick="appendCharacter('5')">5</button>
+        <button onclick="appendCharacter('6')">6</button>
+        <button onclick="appendCharacter('-')">-</button>
+        <br>
+        <button onclick="appendCharacter('7')">7</button>
+        <button onclick="appendCharacter('8')">8</button>
+        <button onclick="appendCharacter('9')">9</button>
+        <button onclick="appendCharacter('*')">*</button>
+        <br>
+        <button onclick="appendCharacter('0')">0</button>
+        <button onclick="appendCharacter('.')">.</button>
+        <button onclick="calculate()">=</button>
+        <button onclick="appendCharacter('/')">/</button>
+        <br>
+        <button onclick="clearDisplay()" colspan="4">C</button>
+    </div> <!-- Added this -->
+
+    <script>
         // Function to create a particle
         function createParticle(x, y) {
             const particle = document.createElement('div');
@@ -133,6 +174,23 @@
         document.addEventListener('mousemove', (e) => {
             createParticle(e.pageX, e.pageY);
         });
+
+        function appendCharacter(character) {
+            document.getElementById('display').value += character;
+        }
+
+        function calculate() {
+            try {
+                var display = document.getElementById('display');
+                display.value = eval(display.value);
+            } catch (error) {
+                display.value = 'Error';
+            }
+        }
+
+        function clearDisplay() {
+            document.getElementById('display').value = '';
+        }
     </script>
 </body>
 </html>
