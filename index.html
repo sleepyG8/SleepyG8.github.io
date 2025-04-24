@@ -8,93 +8,80 @@
         body {
             margin: 0;
             font-family: Arial, sans-serif;
-            background-color: #f4f4f9; /* Light background color */
-            color: #333; /* Dark text for readability */
-            position: relative; /* Added this */
+            background-color: #000; /* Black background */
+            color: #0f0; /* Green text */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
         }
 
         header {
-            background-color: #83a4d4; /* Soft blue */
-            color: #fff;
+            background-color: #0f0; /* Green background for header */
+            color: #000; /* Black text for header */
             padding: 10px;
             text-align: center;
             font-size: 1.5em;
-        }
-
-        .sidebar {
-            position: fixed;
-            top: 50px;
-            left: 0;
-            width: 250px;
-            height: calc(100% - 50px);
-            background-color: #fff; /* White background */
-            border-right: 2px solid #ccc; /* Light grey border */
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-            overflow-y: auto;
-            padding: 15px;
+            width: 100%;
         }
 
         .content {
-            margin-left: 270px;
+            text-align: center;
             padding: 20px;
-            background-color: #f9f9f9;
+            background-color: #111; /* Slightly lighter black for contrast */
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 255, 0, 0.5);
+            width: 90%;
+            max-width: 600px;
         }
 
-        .sidebar a {
-            display: block;
-            color: #333;
+        .content h1, .content p, .content a {
+            margin-bottom: 15px;
+        }
+
+        .content a {
+            color: #0f0;
             text-decoration: none;
-            margin-bottom: 10px;
-            font-size: 1.1em;
-            transition: color 0.3s ease;
+            font-weight: bold;
         }
 
-        .sidebar a:hover {
-            color: #83a4d4; /* Match the header color */
+        .content a:hover {
+            color: #0c0; /* Darker green on hover */
         }
 
         footer {
             text-align: center;
             padding: 10px;
-            background-color: #83a4d4;
-            color: #fff;
+            background-color: #0f0;
+            color: #000;
             position: fixed;
             bottom: 0;
-            left: 0;
             width: 100%;
         }
 
-        .cursor-trail {
-            position: absolute;
-            width: 10px;
-            height: 10px;
-            background-color: #83a4d4;
-            border-radius: 50%;
-            pointer-events: none;
-            animation: fadeOut 1s ease-out forwards;
-        }
-
-        @keyframes fadeOut {
-            0% {
-                opacity: 1;
-                transform: scale(1);
-            }
-            100% {
-                opacity: 0;
-                transform: scale(0.5);
-            }
-        }
-
-        /* Styles for the bottom right content */
         .bottom-right {
+            background-color: #111;
+            color: #0f0;
+            padding: 10px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 255, 0, 0.5);
             position: fixed;
-            bottom: 40px;
-            left: 1px;
-            font-size: 1.5rem; /* Adjust this to make it bigger or smaller */
-            background-color: #83a4d4;
-            padding: 5px;
-            border-radius: 5px;
-            box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2);
+            bottom: 80px;
+            right: 10px;
+        }
+
+        /* Make the page responsive */
+        @media (max-width: 600px) {
+            .content {
+                width: 95%;
+                padding: 15px;
+            }
+
+            .bottom-right {
+                bottom: 60px;
+                right: 5px;
+            }
         }
     </style>
 </head>
@@ -102,29 +89,19 @@
     <header>
         The Boiler Room
     </header>
-    <div class="sidebar">
-        <h2>Navigation</h2>
-        <a href="#">Home</a>
-        <a href="#">Articles</a>
-        <a href="#">Categories</a>
-        <a href="#">About</a>
-    </div>
     <div class="content">
         <h1>Welcome to the Wiki</h1>
-        
         <p>low level wizard</p>
         <p>To do:</p>
-        <a href="/TradingBot.html">Documentation on my multi threaded beat of a trading engine</a> 
+        <a href="/TradingBot.html">Documentation on my multi-threaded beast of a trading engine</a>
         <br>
         <a href="https://coinzh.in">Link to my other website</a>
         <br>
-
         <a href="/essays.html">Essays</a>
     </div>
     <footer>
         © 2025 Your Wiki Name
     </footer>
-
     <div class="bottom-right">
         <h3>Simple Calculator</h3>
         <input type="text" id="display" disabled>
@@ -150,30 +127,9 @@
         <button onclick="appendCharacter('/')">/</button>
         <br>
         <button onclick="clearDisplay()" colspan="4">C</button>
-    </div> <!-- Added this -->
+    </div>
 
     <script>
-        // Function to create a particle
-        function createParticle(x, y) {
-            const particle = document.createElement('div');
-            particle.className = 'cursor-trail';
-            document.body.appendChild(particle);
-
-            // Set the particle position
-            particle.style.left = `${x}px`;
-            particle.style.top = `${y}px`;
-
-            // Remove particle after animation
-            setTimeout(() => {
-                particle.remove();
-            }, 1000);
-        }
-
-        // Add event listener for mouse movement
-        document.addEventListener('mousemove', (e) => {
-            createParticle(e.pageX, e.pageY);
-        });
-
         function appendCharacter(character) {
             document.getElementById('display').value += character;
         }
