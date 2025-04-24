@@ -60,15 +60,36 @@
             width: 100%;
         }
 
-        .bottom-right {
+        /* Calculator container */
+        .calculator-container {
+            position: fixed;
+            bottom: 80px;
+            right: 10px;
             background-color: #111;
             color: #0f0;
             padding: 10px;
             border-radius: 10px;
             box-shadow: 0 5px 15px rgba(0, 255, 0, 0.5);
+            z-index: -1; /* Initially hidden layer */
+            display: none; /* Hidden by default */
+        }
+
+        /* Toggle button */
+        .toggle-button {
             position: fixed;
-            bottom: 80px;
+            bottom: 10px;
             right: 10px;
+            background-color: #0f0;
+            color: #000;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .toggle-button:hover {
+            background-color: #0c0;
         }
 
         /* Make the page responsive */
@@ -78,8 +99,13 @@
                 padding: 15px;
             }
 
-            .bottom-right {
+            .calculator-container {
                 bottom: 60px;
+                right: 5px;
+            }
+
+            .toggle-button {
+                bottom: 5px;
                 right: 5px;
             }
         }
@@ -102,7 +128,7 @@
     <footer>
         © 2025 Your Wiki Name
     </footer>
-    <div class="bottom-right">
+    <div class="calculator-container" id="calculator">
         <h3>Simple Calculator</h3>
         <input type="text" id="display" disabled>
         <br>
@@ -128,8 +154,21 @@
         <br>
         <button onclick="clearDisplay()" colspan="4">C</button>
     </div>
+    <button class="toggle-button" onclick="toggleCalculator()">Toggle Calculator</button>
 
     <script>
+        // Function to toggle the calculator visibility
+        function toggleCalculator() {
+            const calculator = document.getElementById('calculator');
+            if (calculator.style.display === 'none' || calculator.style.display === '') {
+                calculator.style.display = 'block'; // Show calculator
+                calculator.style.zIndex = '1'; // Bring to front
+            } else {
+                calculator.style.display = 'none'; // Hide calculator
+                calculator.style.zIndex = '-1'; // Send to back
+            }
+        }
+
         function appendCharacter(character) {
             document.getElementById('display').value += character;
         }
