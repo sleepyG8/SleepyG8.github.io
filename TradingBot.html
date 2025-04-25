@@ -24,7 +24,7 @@
             color: #0f0; /* Green text */
             padding: 20px;
             text-align: center;
-            font-size: 2em;
+            font-size: 1.5em;
             font-weight: bold;
         }
 
@@ -50,10 +50,14 @@
             bottom: 0;
             width: 100%;
         }
+
+        button {
+            font-size: 1.2em;
+        }
     </style>
 <body>
     <header>
-        <h1>Trading Bot Docs</h1>
+        <h1>Trading Engine Docs</h1>
     </header>
 
     <main>
@@ -63,7 +67,7 @@
         </section>
 
         <section id="endpoints">
-            <h2>How did I make it?</h2>
+            <h2>How did I make it?:</h2>
           <p>I use a GO api to track prices and data to send to Stocknet, it really helps having a live price feed always running from a VPS. The trading engine will always run flawless, and the api will always update, which leaves a never ending cycle of supply and demand gains without hiccups or lags</p>
           <p>The reason I wrote this in C is because why not? its the fastest, and I have complete control over memory, pointers, threads, etc, etc allowing me to create not just a trading bot but a fully functional trading engine that never sleeps and never hiccups. A correctly written C program cant fail, they are designed to be for operations where failure is not an option. This bot was built from the metal up with 0 hand holding and 0 tutorials or guides.</p>
           <p>all of the infomation I used to build this was form WINAPI docs, OANDAS api docs, Windows Internals book(2016), and online forums</p>
@@ -71,13 +75,13 @@
         </section>
 
         <section id="authentication">
-            <h2>Authentication</h2>
+            <h2>Authentication:</h2>
           <p>safety on my api was key so I dont get DDOS and have to pay a sum because my VPS plan is limited right now, once I see more people flooding in I will scale up, But safety of users and me are always a key component of every move I make</p>
           <p>A feature I am proud of is every user can know there account information is safe, being as all account tokens and information is stored locally and sent to OANDAS api for authentication, the server doesnt care what that info is, its purpose is to throw prices at your system that get taken by the engine and answered accordingly</p>
         </section>
 
         <section id="examples">
-            <h2>Stay tuned a free version of Stocknet will be soon available, I just finished the final project and will push this out like crazy</h2>
+            <h3>Stay tuned a free version of Stocknet will be soon available, I just finished the final project and will push this out like crazy</h3>
             <a href="/Download.html" ><button>Download</button></a>
         </section>
     </main>
