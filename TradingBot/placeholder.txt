@@ -1,1 +1,35 @@
+Trading Engine Use and installation instructions!:
+
+* First thing is READ these docs, and understand what is exactly happening.
+
+* this program is a fully automated trading system and is capable of finding and hitting trades with no user interaction.
+
+* It is fast and effecient, never missing a trade
+
+* Before anything, I chose Oanda as the broker of choice (later on this may change) but as of now its Oanda. You need to create a Oanda account and get the live account running. It might take a few days because there a serious broker and send tax information to the IRS, so it takes a few days for them to confirm you.
+
+* next the Oanda api is used, so get a free key included with every account and save it to a secure location.
+
+* put in as much money as you would Like 5 bucks or even 100 whatever you feel comfortable with, I suggest start with 20 and let the bot do its thing.
+
+* Install the bot.zip file and unzip (you may remove the zip file afterwards)
+
+* double click the Icon labled Bot.exe (It is not signed, but I am working on it)
+
+* a simple terminal window will pop up, yes it is terminal based for now until I create a GUI. It is clean and has some startup information for the user and clean bars in the paid version. The free version has just 2 pairs gbousd and eurusd a already great free start for everyone. the paid version had 6 pairs so far and more features like a W/L statement and even unique bots for premium users (colors, names, faster speed, and eventually all forex pairs and crypto next with a seperate broker!) 
+
+* The engine will only ask this information once, but it ask for the api token which you securly saved already, the account number to hit trades on, and also the amount of units per trade, these all can be changed whenever you want. start at 50 units if you want to test the waters. This is about trust and building something that benefits people who dont have time to trade.
+
+* After one time of inputing that information its saved to files with the corresponding names .txt's just edit those files to change
+
+* The bot shoudl but pulling data from an api (and even possibly already hitting a trade) as soon as it starts and can be ran in the background.
+
+* this works for prop firms, I know they dont use Oanda but join the discord and get free plays on forex and crypto and make money with this all they way. 
+
+* it must be re-ran each reboot of your device, and either send it to the background or just minimize the window and lets build a finacially free life together!
+
+* Last step is.... Do you, dont worry about the stress of trading let Stocknet bring you some peace of mind and money in your pocket
+
+* if prices are 0.00000 that means no active trades, and the trading engine is looking for your next play.
+
 
