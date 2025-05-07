@@ -8,22 +8,33 @@
         body {
             font-family: Arial, sans-serif;
             line-height: 1.6;
-            margin: 20px;
-            padding: 10px;
-            background-color: #f9f9f9;
-            color: #333;
-        }
-        header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        h1, h2 {
             margin: 0;
-            font-weight: normal;
+            padding: 10px;
+            background-color: #f5f5dc; /* Off-white */
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            height: 100vh;
         }
-        section {
+
+        .container {
+            text-align: center;
+            width: 80%;
+            max-width: 600px;
+            margin-top: 10vh;
+        }
+
+        .title {
+            font-size: 2rem;
             margin-bottom: 20px;
         }
+
+        .zine-space {
+            height: 40vh; /* Reserved space for future zines */
+        }
+
         footer {
             text-align: center;
             margin-top: 30px;
@@ -33,29 +44,32 @@
     </style>
 </head>
 <body>
-    <header>
-        <h1>Documentation on coding concepts</h1>
-        <h2>Sleepy</h2>
-    </header>
-    <main>
+    <div class="container">
+        <header>
+            <h1>Documentation on Coding Concepts</h1>
+            <h2 class="title">Sleepy</h2>
+        </header>
+
         <section>
-            <h2>Languages</h2>
+            <h2>Languages:</h2>
             <ol>
-                <li>C</li>
+                <li>C/C++</li>
                 <li>Go</li>
+                <li>Bash</li>
             </ol>
         </section>
+
         <section>
-            <h2>Documentation</h2>
-            <p>Write the main content of your essay here. Organize into paragraphs as needed.</p>
+            <h2>Zines:</h2>
+            <a href="/FiberInjection.html">Fiber Injection</a>
         </section>
-        <section>
-            <h2>Final thoughts</h2>
-            <p>Wrap up your thoughts and provide a concluding statement here...</p>
-        </section>
-    </main>
-    <footer>
-        <p>&copy; 2025 Sleepy. All rights reserved.</p>
-    </footer>
+
+        <div class="zine-space"></div> <!-- Placeholder space for future zines -->
+
+        <footer>
+            <p>&copy; 2025 Sleepy. All rights reserved.</p>
+        </footer>
+    </div>
 </body>
 </html>
+
