@@ -109,7 +109,7 @@
   <div class="container">
     <section id="introduction">
       <h2>Introduction</h2>
-
+      <p>For awhile now people have been relying on CreateThreadEx and other system calls that havw been, for a long time, hooked into Defender and other EDR solutions. The common way to avoid this is using something called NT api calls which reside in NTDLL. These calls are important because they directly make the system call to the SSDT in the kernel. This is the "barrier" or in official terms a system call that seperates User mode and kernel mode. I will go more into detail on kernel mode in a future zine but as of now lets stick with user mode. These calls are made by the OS when making high level api calls like CreateFile() or CreateRemoteThread() Using these calls helps avoid detection but doesnt promise anything, but paired with more techniques this is ideal for writing undetected software. In this zine I will go into detail about a API called CreateFiber() and ConvertThreadToFiber() which allow for a new type of injection method.<\p>
     </section>
 
     <section id="content">
