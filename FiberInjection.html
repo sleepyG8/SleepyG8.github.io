@@ -1,1 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fiber-based Injection</title>
+  <style>
+    /* General Reset */
+    body, h1, h2, p, code {
+      margin: 0;
+      padding: 0;
+      font-family: 'Arial', sans-serif;
+      box-sizing: border-box;
+    }
 
+    body {
+      background-color: #f0f0f0;
+      color: #333;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      background: #fff;
+      max-width: 800px;
+      margin: 20px auto;
+      border-radius: 8px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+    }
+
+    header {
+      background: #2d2d2d;
+      color: white;
+      text-align: center;
+      padding: 20px;
+    }
+
+    header h1 {
+      font-size: 2rem;
+    }
+
+    nav {
+      background: #333;
+      padding: 10px;
+      text-align: center;
+    }
+
+    nav a {
+      color: white;
+      text-decoration: none;
+      margin: 0 15px;
+      font-size: 1rem;
+    }
+
+    nav a:hover {
+      text-decoration: underline;
+    }
+
+    .content {
+      padding: 20px;
+    }
+
+    .box {
+      background: #f9f9f9;
+      padding: 20px;
+      margin-bottom: 20px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+
+    .box h2 {
+      font-size: 1.5rem;
+      margin-bottom: 10px;
+    }
+
+    .box p, .box code {
+      font-size: 1rem;
+      line-height: 1.8;
+      white-space: pre-wrap;
+    }
+
+    footer {
+      background: #2d2d2d;
+      color: white;
+      text-align: center;
+      padding: 10px;
+      font-size: 0.9rem;
+    }
+
+    footer a {
+      color: #58a6ff;
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Fiber-based Injection</h1>
+    </header>
+
+    <nav>
+      <a href="#introduction">Introduction</a>
+      <a href="#content">Why Fibers?</a>
+      <a href="#closing">Getting to Work</a>
+    </nav>
+
+    <div class="content">
+      <div class="box" id="introduction">
+        <h2>Introduction</h2>
+        <p>For awhile now people have been relying on <code>CreateThreadEx</code> and other system calls that have been, for a long time, hooked into Defender and other EDR solutions. The common way to avoid this is by understanding the methods these solutions use to inspect and detect unusual behaviors.</p>
+      </div>
+
+      <div class="box" id="content">
+        <h2>Why Fibers?</h2>
+        <p>Fibers are a user-mode-only feature of the Windows OS that have been around forever. Reading through <em>Windows Internals (2016)</em>, I noticed something about fibers that was unique. Fibers are unique in that they allow for cooperative multitasking within a single thread, unlike threads, which rely on the kernel for scheduling. This makes them an interesting target for bypassing certain security mechanisms.</p>
+      </div>
+
+      <div class="box" id="closing">
+        <h2>Getting to Work</h2>
+        <p>As I got to work on the proof of concept (POC), I had just finished my debugger, which also uses these same techniques and goes deep into Windows architecture and registers. The injector is the first of its kind to take advantage of fibers in this way.</p>
+        <code>
+hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_ALL_ACCESS, FALSE, pi.dwProcessId);
+if (hProcess) {
+    LPVOID fiberMain = ConvertThreadToFiber(NULL); // Convert the thread to a fiber
+    LPVOID debugFiber = CreateFiber(0, debug, argv[1]); // Setting up the fiber
+
+    printf("About to run the shellcode...\n"); // Prep done 
+
+    SwitchToFiber(debugFiber);
+
+    // Hidden process + obfuscated shellcode = full control
+
+    DeleteFiber(debugFiber); 
+} else {
+    printf("Failed to open process\n");
+}
+        </code>
+        <p>This snippet creates a fiber inside of the created process and then proceeds with its action.</p>
+      </div>
+    </div>
+
+    <footer>
+      <p>Thank you for engaging with my zine on Fiber-based Injection. I hope this resource has provided valuable insights. Keep up with modern security by reading my zines.</p>
+      <p>&copy; 2025 Sleepy All Rights Reserved. | <a href="https://github.com/sleepyG8">GitHub</a></p>
+    </footer>
+  </div>
+</body>
+</html>
