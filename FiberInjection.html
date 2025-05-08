@@ -109,12 +109,12 @@
   <div class="container">
     <section id="introduction">
       <h2>Introduction</h2>
-      For awhile now people have been relying on CreateThreadEx and other system calls that havw been, for a long time, hooked into Defender and other EDR solutions. The common way to avoid this is using something called NT api calls which reside in NTDLL. These calls are important because they directly make the system call to the SSDT in the kernel. This is the "barrier" or in official terms a system call that seperates User mode and kernel mode. I will go more into detail on kernel mode in a future zine but as of now lets stick with user mode. These calls are made by the OS when making high level api calls like CreateFile() or CreateRemoteThread() Using these calls helps avoid detection but doesnt promise anything, but paired with more techniques this is ideal for writing undetected software. In this zine I will go into detail about a API called CreateFiber() and ConvertThreadToFiber() which allow for a new type of injection method.
+      For awhile now people have been relying on CreateThreadEx and other system calls that have been, for a long time, hooked into Defender and other EDR solutions. The common way to avoid this is using something called NT api calls which reside in NTDLL. These calls are important because they directly make the system call to the SSDT in the kernel. This is the "barrier" or in official terms a system call that seperates User mode and kernel mode. I will go more into detail on kernel mode in a future zine but as of now lets stick with user mode. These calls are made by the OS when making high level api calls like CreateFile() or CreateRemoteThread() Using these calls helps avoid detection but doesnt promise anything, but paired with more techniques this is ideal for writing undetected software. In this zine I will go into detail about a API called CreateFiber() and ConvertThreadToFiber() which allow for a new type of injection method.
     </section>
 
     <section id="content">
-      <h2>Content</h2>
-
+      <h2>Why Fibers?</h2>
+Fibers are a User mode only feature of windows OS that have been around forever. Reading through windows internals(2016) I noticed something about fibers that was unique. Fibers are unique in that they have there own stack, operate only in user mode(ring 3), and control flow of execution like threads but are never seen by the scheduler. As I am obsessive over these sorts of things I crafted a POC of how fibers can be seen being used by APT in the wild and providing possible mitigations.
 
     </section>
 
