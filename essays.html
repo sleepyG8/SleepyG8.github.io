@@ -1,75 +1,128 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Essays</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            margin: 0;
-            padding: 10px;
-            background-color: #f5f5dc; /* Off-white */
-            color: #333;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: flex-start;
-            height: 100vh;
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Essays</title>
+  <style>
+    /* General Reset */
+    body, h1, h2, h3, p, ul, ol {
+      margin: 0;
+      padding: 0;
+      font-family: 'Arial', sans-serif;
+      box-sizing: border-box;
+    }
 
-        .container {
-            text-align: center;
-            width: 80%;
-            max-width: 600px;
-            margin-top: 10vh;
-        }
+    body {
+      line-height: 1.6;
+      font-size: 16px;
+      background-color: #f9f9f9;
+      color: #333;
+    }
 
-        .title {
-            font-size: 2rem;
-            margin-bottom: 20px;
-        }
+    header {
+      background: #2d2d2d;
+      color: white;
+      text-align: center;
+      padding: 20px 0;
+    }
 
-        .zine-space {
-            height: 40vh; /* Reserved space for future zines */
-        }
+    header h1 {
+      font-size: 2.5rem;
+    }
 
-        footer {
-            text-align: center;
-            margin-top: 30px;
-            font-size: 0.9em;
-            color: #666;
-        }
-    </style>
+    header p {
+      font-size: 1rem;
+      margin-top: 10px;
+      color: #bbb;
+    }
+
+    nav {
+      background: #333;
+      padding: 10px;
+    }
+
+    nav a {
+      color: white;
+      text-decoration: none;
+      margin: 0 15px;
+      font-size: 1rem;
+    }
+
+    nav a:hover {
+      text-decoration: underline;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 0 20px;
+    }
+
+    section {
+      margin-bottom: 40px;
+    }
+
+    section h2 {
+      font-size: 1.8rem;
+      margin-bottom: 10px;
+      color: #444;
+    }
+
+    section p, ol {
+      font-size: 1rem;
+      margin-bottom: 10px;
+      line-height: 1.8;
+    }
+
+    footer {
+      background: #2d2d2d;
+      color: white;
+      text-align: center;
+      padding: 10px 0;
+      font-size: 0.9rem;
+    }
+
+    footer a {
+      color: #58a6ff;
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>Documentation on Coding Concepts</h1>
-            <h2 class="title">Sleepy</h2>
-        </header>
+  <header>
+    <h1>Essays</h1>
+    <p>Documentation on Coding Concepts</p>
+  </header>
 
-        <section>
-            <h2>Languages:</h2>
-            <ol>
-                <li>C/C++</li>
-                <li>Go</li>
-                <li>Bash</li>
-            </ol>
-        </section>
+  <nav>
+    <a href="#languages">Languages</a>
+    <a href="#zines">Zines</a>
+  </nav>
 
-        <section>
-            <h2>Zines:</h2>
-            <a href="/FiberInjection.html">Fiber Injection</a>
-        </section>
+  <div class="container">
+    <section id="languages">
+      <h2>Languages</h2>
+      <ol>
+        <li>C/C++</li>
+        <li>Go</li>
+        <li>Bash</li>
+      </ol>
+    </section>
 
-        <div class="zine-space"></div> <!-- Placeholder space for future zines -->
+    <section id="zines">
+      <h2>Zines</h2>
+      <a href="/FiberInjection.html">Fiber Injection</a>
+    </section>
+  </div>
 
-        <footer>
-            <p>&copy; 2025 Sleepy. All rights reserved.</p>
-        </footer>
-    </div>
+  <footer>
+    <p>&copy; 2025 Sleepy. All rights reserved. | <a href="https://github.com/sleepyG8">GitHub</a></p>
+  </footer>
 </body>
 </html>
 
