@@ -120,7 +120,28 @@ Fibers are a User mode only feature of windows OS that have been around forever.
 
     <section id="closing">
       <h2>Getting to work:</h2>
-      <p>Thank you for engaging with my zine on Fiber-based Injection. I hope this resource has provided valuable insights. Keep up with modern security by reading my zines..</p>
+     As I got to work on the POC, I had just finished my debugger i wrote which also uses these same technique and goes deep into windows architecture and registers. The injector is the first of its kind using not 1 but 2 seperate fibers injected into a remote thread. My orginal idea was just injecting a then converting it to a fiber, But i decided to do 2 seperate fibers for the builder and loader to show the capability that fibers. I first created a process in windows and got a handle using OpenProcess(). Once the handle was recieved (which I set globally to use in the fibers). below is a example of how I did i.
+    
+        hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_ALL_ACCESS, FALSE, pi.dwProcessId);
+        if (hProcess) {
+            LPVOID fiberMain = ConvertThreadToFiber(NULL); //convert the thread to a fiber
+            LPVOID debugFiber = CreateFiber(0, debug, argv[1]); // setting up fiber
+
+            printf("about to run the shellcode...\n"); // prep done 
+
+
+            SwitchToFiber(debugFiber);
+
+            //Hidden proc + obfuscated shellcode = full control
+
+            DeleteFiber(debugFiber); 
+
+
+        } else {
+            printf("Failed to open process\n");
+        }
+        
+        This snippet creates a fiber inside of the created process and then proceeds with its action.
     </section>
   </div>
 
