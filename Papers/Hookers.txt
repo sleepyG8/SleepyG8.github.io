@@ -1,0 +1,149 @@
+        ************************************************************
+                                 Sleepy - 2025
+                        Avoiding EDR by Bypassing Hooks                
+         ************************************************************
+
+Modern EDR and AV solution heavily rely on function hooking to monitor suspicous API 
+usage during runtime. The way a hook works is simple. A hook controls the execution
+of a function by writing custom code, or a monitor, to the address of a function in
+memory using a jmp instruction. A jmp allows the EDR/AV to control execution flow of
+a program, similar to how avoiding them works.
+
+Knowing how modern security attempts to stop a malicous program is the first step to
+writing a bypass. This zine is going to be based on behavioral detection, being as 
+years of static detection work has been done including old polymorphic asm all the 
+way to shikata from msf and other modern stub work. 
+
+After some deep thinking, I though "what if function names were random" and security
+mechanisms in place would be still looking for a the old function names. 
+
+One way to achieve this is by dynamically resolving the function address from the 
+imports of PE file. For example, I will be going into IsDebuggerPresent() 
+for simplicity sake in my example.
+
+Similar to writing a hook, writing this requries parsing the address of the function
+and doing something with that address. A IAT hook would write a new custom fuction
+address to the address of the original function, enumerating the address of a function
+will use that address and replace GetProcAddress().
+
+Without using GetProcAddress() or just calling the high level API, the EDR/AV will have
+a hard time even knowing that a particular function was used. This along with mixing the 
+flow up can take a detected program to a undetected program. 
+
+I will be walking through the process of aquiring the Address and then how to dyncamically
+resolve it. The full code will be in a seperate file if you would like to just view the
+full source code, but what fun is that? Build it yourself, the below code and notes should
+give you everything you need.
+
+==========================================================================================
+BYTE* baseAddress = (BYTE*)GetModuleHandle(NULL);
+==========================================================================================
+
+First things first is getting the base address. I did this in my program using the above code,
+by using NULL in the GetModuleHandle, which returns the current base address for the PE file.
+
+==========================================================================================
+
+   // Read DOS header
+    PIMAGE_DOS_HEADER dh = (PIMAGE_DOS_HEADER)baseAddress;
+    if (dh->e_magic != IMAGE_DOS_SIGNATURE) {
+        printf("Invalid PE file\n");
+        return NULL;
+    }
+
+    // Read NT headers
+    PIMAGE_NT_HEADERS nt = (PIMAGE_NT_HEADERS)((BYTE*)dh + dh->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) {
+        printf("Invalid NT headers\n");
+        return NULL;
+    }
+
+    // Get Optional Header
+    PIMAGE_OPTIONAL_HEADER oh = &nt->OptionalHeader;
+
+==========================================================================================
+
+Next were doing some real boilerplate work, pulling the dos, nt, and oh. 
+
+==========================================================================================
+
+PIMAGE_IMPORT_DESCRIPTOR id = (PIMAGE_IMPORT_DESCRIPTOR)((BYTE*)baseAddress + 
+oh->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
+
+==========================================================================================
+
+You want to set the import descriptor as the base address + the virtual address of the 
+optional header with DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT]. Remeber that when 
+moving around in memory like this, a lot of times you must add an address to the base
+address of the PE file to actually read the data at the offset.
+
+==========================================================================================
+
+    while (id->Name != 0 && id->OriginalFirstThunk != 0) {
+        char* importName = (char*)((BYTE*)baseAddress + id->Name);
+        printf("%s\n", importName);
+
+        if (strcmp(importName, dll) == 0) {
+
+        PIMAGE_THUNK_DATA origThunk = (PIMAGE_THUNK_DATA)((BYTE*)baseAddress + id->OriginalFirstThunk);
+        PIMAGE_THUNK_DATA thunkData = (PIMAGE_THUNK_DATA)((BYTE*)baseAddress + id->FirstThunk);
+            
+            while (origThunk->u1.AddressOfData != 0) {
+PIMAGE_IMPORT_BY_NAME importByName = (PIMAGE_IMPORT_BY_NAME)((BYTE*)baseAddress + origThunk->u1.AddressOfData);
+
+                if (importByName) {
+                FARPROC funcAddr = (FARPROC)thunkData->u1.Function;
+                //printf("+ %s", importByName->Name);
+                //printf("Function Address: %p\n", funcAddr);
+                if (strcmp(importByName->Name, function) == 0) {
+                    return funcAddr;
+                }
+            }
+                origThunk++;
+                thunkData++;
+            
+        }
+        printf("+++++++++++++++++++++++++++++++++++++++\n");
+        
+    }
+    id++;
+}
+
+==========================================================================================
+
+This above section is an example loop, this pulls the actual name of the function you want to 
+return the address for. It will return FARPROC that contains the function address.
+
+Now lets call an api without using GetProcAddress() or any Windows apis. You must manually
+define the function in your program like this
+
+==========================================================================================
+
+typedef BOOL(WINAPI *IsDebuggerPresent_t)();
+
+getfunc(char* dll, char* function) {
+...
+}
+
+int main() {
+
+    FARPROC myisdebuggerpresent = getfunc("KERNEL32.dll", "IsDebuggerPresent");
+       
+    IsDebuggerPresent_t pIsDebuggerPresent = (IsDebuggerPresent_t)myisdebuggerpresent;
+    BOOL isDebugged = pIsDebuggerPresent();
+
+    printf("Debugger Status: %s\n", isDebugged ? "Detected!" : "Not Detected.");
+
+    return TRUE;
+
+}
+
+==========================================================================================
+
+Final Thoughts:
+This concludes my zine on Avoiding EDR by Bypassing Hooks. If you liked this, there is much
+more to come. Thx for reading and shout out to all the old VX guys from the past ;)
+
+The original copy of this lives on coinzh.in/Hookers.txt
+
+[EOF]
