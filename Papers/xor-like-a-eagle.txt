@@ -1,0 +1,373 @@
+    ===================================================
+    +                XOR Like An Eagle                +
+    +                     Sleepy                      +
+    +                      2025                       +
+    ====================================================
+
+While writing up a custom XOR cypher for a loader I was putting
+together. I thought of giving everyone a breakdown of my personal
+favorite encryption scheme.
+
+There are a lot of differnt cyphers out there from AES, RSA, or
+some other bloated encryption scheme. I dont know about everyone
+else but I like to Keep things straight forward, and a one time
+pad is as straight forward as they come.
+
+To begin, I want to give an explanation on what a XORing even is
+or does. As I am sure some of you have used or heard of a XOR 
+cypher before. There are differnt ways of going about your 
+cypher but I think a one time pad is perfect, expecially for 
+shellcode becuase shellcode has a relativly smaller size compared
+to a larger exe, or even a text file. This makes One time pad my
+go to.
+
+When XORing 2 bytes together you are basically combining the bits
+directly. For example:
+
+0 ^ 0 = 0
+1 ^ 0 = 1
+0 ^ 1 = 1
+1 ^ 1 = 0 
+
+So to begin writing this we need to first know what we are going to
+need to write a one time pad. We need to generate a random key the 
+same exact size as the file. This is important because it provides
+a very high level of entropy, being as the Key is so large, and hard
+to guess. So lets start by getting the file we would like to XOR and
+then making a getKey function because that just seems like a good 
+first step.
+
+I got the file with a basic function:
+
+===================================================================
+
+char* getFile(const char *arg) {
+
+    FILE* file = fopen(arg, "r+");
+    if (!file) {
+        printf("Error opening file\n");
+        return NULL;
+    }
+
+    fseek(file, 0, SEEK_END);
+    size = ftell(file);
+    fseek(file, 0, SEEK_SET);
+
+    char* buffer = (char*)malloc(size * sizeof(char));
+
+    fread(buffer, 1, size, file);
+    buffer[size] = '\0';
+    //printf("size: %i\n", size);
+    //printf("buffer: %s\n", buffer);
+
+    return buffer;
+}
+
+======================================================================
+
+When writing up a XOR cypher in C I like to do a few things. One of 
+those things is not just feeding it random data inside of the key
+which a lot of people fail to realize until its to late. 
+
+I prefer something like this which gives the cypher actual chars to
+XOR with not random bytes. This helps a lot when decrypting into the
+actual original data.
+
+unsigned char words[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ123456789"
+
+Lets make a key:
+====================================================================
+
+char* getKey(size_t size, char* fileName) {
+    srand(time(NULL));
+    char *buffer = (char*)malloc(size * sizeof(char));
+    for (int i=0; i < size; i++) {
+        buffer[i] = words[rand() % (sizeof(words) - 1)];
+    }
+    buffer[size] = '\0';
+    //printf("buffer: %s\n", buffer);
+
+    FILE *file = fopen(fileName, "w+");
+    if (!file) {
+        printf("Error creating key file\n");
+    }
+
+    fprintf(file, "%s\n", buffer);
+
+    return buffer;
+}
+
+======================================================================
+
+The above code is an example of generating a key from the provided array.
+Now with those 2 functions Lets get into the encryption function. So, as
+I was building this I thought it would be great if it actually read the
+key and encrypted bytes to stdout becuase this is helpful when copy and
+pasting into a loader.
+
+=========================================================================
+
+BOOL encrypt(char* arg, char* keyfilename, char* fileName) {
+char* file = getFile(arg);
+if (file == NULL) {
+    printf("Error getting the file\n");
+    return FALSE;
+}
+
+
+char *key = getKey(size, keyfilename);
+if (key == NULL) {
+    printf("Problem creating key\n");
+}
+
+printf("\n Key: ");
+for (int i=0; i < size; i++) {
+
+printf("\\x%02X", (BYTE)key[i]);
+}
+printf("\n");
+
+char* final = (char*)malloc(size);
+
+    for (int i=0; i < size; i++) {
+         final[i] = key[i] ^= file[i];
+    }
+
+FILE* fileOut = fopen(fileName, "w+");
+if (!fileOut) {
+    printf("Error writing to file\n");
+}
+
+final[size] = '\0';
+
+fprintf(fileOut, "%s", final);
+
+for (int i=0; i < size; i++) {
+
+printf("\\x%02X", (BYTE)final[i]);
+}
+
+return TRUE;
+}
+
+==========================================================
+
+Now with our encryption scheme written, lets test it out and 
+create our main function structure.
+
+============================================================
+
+int main(int argc, char* argv[]) {
+
+if (argc < 3) {
+    printf("Usage: xor -e <file> <keys name> <new filename>\n");
+    Beep(250, 500);
+    Beep(800, 500);
+    return 1;
+}
+
+if (strcmp(argv[1], "-e") == 0) {
+
+if (argv[2] == NULL) {
+    printf("Usage: xor -e <file> <keys name> <new filename>\n");
+    return 1;
+}
+
+encrypt(argv[2], argv[3], argv[4]);
+
+return 0;
+} 
+
+//We will be adding out decryption function down here next
+
+}
+===================================================================
+
+Okay so with evrything in place lets xor something, give a filename,
+a key, and an outfile name and watch it scramble your data into the
+new file.
+
+Now lo and behold, if youve never written one of these before, decrypting
+is the same exact thing but backwards. So we will need the key and the 
+encrypted data in order to combine them and get the original data back.
+Lets write out decryption scheme.
+
+This function is longer because it needs to open both files and XOR
+the bytes once again.
+
+=======================================================================
+
+BOOL decrypt(char* arg, char* keyFile, char* fileName) {
+FILE* file = fopen(arg, "r+");
+if (!file) {
+    printf("Error opening %s\n", arg);
+    return FALSE;
+}
+
+size_t filesize = 0;
+
+fseek(file, 0, SEEK_END);
+filesize = ftell(file);
+fseek(file, 0, SEEK_SET);
+
+char* buffer = (char*)malloc(filesize);
+
+fread(buffer, 1, filesize, file);
+buffer[filesize] = '\0';
+//printf("Encrypted data: %s\n", buffer);
+
+FILE *keyfile = fopen(keyFile, "r+");
+if (!keyfile) {
+    printf("Error finding the key file\n");
+fclose(keyfile);
+fclose(file);
+free(buffer);
+    return FALSE;
+}
+
+size_t keyfileSize = 0;
+
+fseek(keyfile, 0, SEEK_END);
+keyfileSize = ftell(keyfile);
+fseek(keyfile, 0, SEEK_SET);
+
+char* keybuffer = (char*)malloc(keyfileSize);
+fread(keybuffer, 1, keyfileSize, keyfile);
+keybuffer[keyfileSize] = '\0';
+
+//printf("Key: %s\n", keybuffer);
+
+char* finalbuff = (char*)malloc(keyfileSize);
+for (int i=0; i < keyfileSize; i++) {
+    finalbuff[i] = keybuffer[i] ^ buffer[i];
+}
+
+finalbuff[keyfileSize] = '\0';
+printf("Decrypted: %s", finalbuff);
+
+FILE *decrypted = fopen(fileName, "a+");
+if (!decrypted) {
+    printf("Error writing decrypted data\n");
+    fclose(decrypted);
+    fclose(keyfile);
+    fclose(file);
+    free(keybuffer);
+    free(buffer);
+return FALSE;
+}
+
+fprintf(decrypted, "%s", finalbuff);
+
+fclose(decrypted);
+fclose(keyfile);
+fclose(file);
+free(keybuffer);
+free(buffer);
+return TRUE;
+}
+
+==============================================================
+
+After this we are just one step away from a full encryption 
+scheme with encryption and decryption. Lets tie it all together
+by editing our main function and finally decrypting that file
+back to its original state.
+
+Your final main function should look like this:
+
+=================================================================
+
+int main(int argc, char* argv[]) {
+
+if (argc < 3) {
+    printf("Usage: xor -e <file> <keys name> <new filename>\n");
+    Beep(250, 500);
+    Beep(800, 500);
+    return 1;
+}
+
+if (strcmp(argv[1], "-e") == 0) {
+
+if (argv[2] == NULL) {
+    printf("Usage: xor -e <file> <keys name> <new filename>\n");
+    return 1;
+}
+
+encrypt(argv[2], argv[3], argv[4]);
+
+return 0;
+} 
+
+
+else if (strcmp(argv[1], "-d") == 0) {
+
+if (argv[2] == NULL) {
+    printf("Usage: xor -d <file> <Key> <new filename>\n");
+    return 1;
+}
+
+decrypt(argv[2], argv[3], argv[4]);
+return 0;
+}
+
+
+}
+
+================================================================
+
+And we are done. Well, almost done, becuase whats the fun in just
+a boring file encryptor. Lets encrypt some shellcode!
+
+I like to structure my code this way with the key and splitting the
+encrypted shellcode into 2 but do whatever you want as long as the
+key and shellcode are in memory and are encrypted.
+
+=================================================================
+
+unsigned char key[] = "\x67\x70\x78\x7A\x31\x41\x59\x5A\x79\x54\x58\x72\x57\x37\x72\x32\x59\x72\x43\x76\x6C\x75\x6B\x41\x57\x52\x5A\x49\x76\x67\x78\x53\x63\x4C\x54\x62\x56\x75\x4C\x52";
+
+unsigned char shellcode1[] = "\x3B\x08\x4D\x39\x6D\x39\x6E\x62\x25\x2C\x6B\x47\x0B\x4F\x41\x07\x05\x0A\x76\x35\x30\x0D";
+unsigned char shellcode2[] = "\x5C\x79\x0B\x2A\x69\x71\x2A\x1F\x4B\x6A\x3F\x34\x61\x21\x0A\x0D\x7B\x6A";
+
+=================================================================
+
+I wrote up a loader that uses this to decrypt its shellcode. The 
+shellcode is completly encrypted with the key until you call this
+function decrypt(). It returns a char with the final decrypted 
+shellcode inside it. Heres the decryptor function. You must 
+combine these before we get onto the decryption stage.
+
+=================================================================
+
+char* decrypt(int keySize, unsigned char* key, char* encryptedShellcode) {
+    char* finalbuff = (char*)malloc(keySize);
+for (int i=0; i < keySize; i++) {
+    finalbuff[i] = key[i] ^ encryptedShellcode[i];
+    //printf("\\x%02X", (unsigned char)finalbuff[i]);
+}
+
+return finalbuff;
+}
+
+=================================================================
+
+Now, all you need to do is the fun stuff, after doing something like
+this to get that function.
+
+=================================================================
+
+char *decrypted = decrypt(10, key, finalShellcode);
+
+//Tip: I find it useful to set the exact bytes (my example was just 10 random bytes)
+
+=================================================================
+
+And your off to the races.
+
+Thanks for reading my zine on XOR encryption, a lot of people 
+overcomplicate this sort of thing but if its not broke dont
+fix it.
+
+Until next time :)
+
+-Sleepy
