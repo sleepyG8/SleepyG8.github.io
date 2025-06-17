@@ -1,0 +1,162 @@
+ 
+===================================================
++                 Identity-theft                  +
++                     Sleepy                      +
++                      2025                       +
+====================================================
+
+Kernel32.dll and other system DLLs often are a trusted
+system resource, meaning theres nothing suspicous about
+loading ntdll.dll or Kernel32.dll into a process because,
+by default, these DLLs are loaded into every process at 
+runtime anyways. This paper is going to be about abusing 
+that trust.
+
+The goal after this paper is to be able to fully commit
+identity theft... on a system dll. 
+
+To begin we must first talk about why this is even important
+in the first place. When a program executes, the EDR/AV hooks
+suspicous functions and can detect a few things. Misuse of a 
+API and/or certain heuristic patterns like a common process
+injection or dll injection. One way I have found to bypass
+both of these detection mechanisms is impersonating a system 
+dll, like Kernel32, by patching the address where the name
+resides, the RVA.
+
+I began writing up some C that walked the IAT and pulled the
+loaded DLLs in memory. I chose to go after Kernel32 in this 
+example, but this will work for any system dll besides ntdll.
+
+After patching the name in the IAT I realized something, I can
+still use the exported functions from within Kernel32 even though
+it was listed under evil3222.dll (I thought the names might have 
+to match in length but it doesnt have to). This alone already had
+peaked my interest but I decided to keep digging.
+
+I had the idea to inject a dll into a memory region in the process
+using VirtualAllocEx and WriteProcessMemory() and see if I can set 
+Kernel32.dll to the address of the allocated memory. In my head, 
+Windows should have loaded my DLL, this was my goal, but instead
+it loads Kernel32 under a random allocated address under the 
+injected DLLs name. 
+
+This was weird to me but still very useful, being able to call 
+functions from a random memory address under a random dll name 
+is valuable in bypassing detections.
+
+I will be going into how you can abuse this to make silent calls.
+
+When I started out, I parsed the IAT, to get the imported DLLs, a
+trivial task. If you would like a complete breakdown on how to do
+this you can refer to Hookers.txt, which gives a solid foundation
+for parsing the IAT maunally in C. 
+
+I patched Kernel32.dll first like this:
+
+importName = remoteaddr;
+
+==================================================================
+
+        HANDLE hProcess = GetCurrentProcess();
+        LPVOID remoteaddr = VirtualAllocEx(hProcess, NULL, sizeof(evilDLL), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+if (!remoteaddr) {
+        printf("VirtualAllocEx failed: %d\n", GetLastError());
+         return FALSE;
+    }
+
+if (!WriteProcessMemory(hProcess, remoteaddr, evilDLL, sizeof(evilDLL), NULL)) {
+    printf("failed to right memory\n");
+}
+
+        DWORD oldProtect;
+        VirtualProtect(importName, 500, PAGE_READWRITE, &oldProtect);
+
+        importName = remoteaddr;
+        printf("%s\n", importName);
+
+=================================================================
+
+Originally, I was trying to write a DLL into memory but I ended up
+writing just the DLL name instead which was evil.dll. After some 
+testing I found out that the DLL was not being written to the 
+address but just the name was. 
+
+Following along, I decided to patch the original Kernel32 address
+with the new address I recieved from VirtualAllocEx(), under a 
+completly differnt name. I could already see the stars aliging.
+
+So, I decided to turn this into a function that I can 
+place into a loader.
+
+I will provide the full source code in a file named identity-theft.c 
+for ease of access. But I recomend you code this yourself and familiarize
+yourself with the PE structure. Just building a GetModuleHandle() wrapper
+will teach you a lot.
+
+I ended up, in my main function, dyncamically calling the function, from 
+our DLL impersonator. This impersonator is really just a wrapper for 
+Kernel32, but EDRs and AVs wont be able to keep track of it like they 
+normally would. 
+
+If EDRs do eventually catch on to this, there are methods for apply 
+stealth further. 
+
+For right now, my POC just contains up to this point, but I have a few 
+ideas I would like to elaborate on. One of these methods is never actually 
+moving Kernel32, but copying it into a random memory region. This first
+method would help hide that Kernel32 is missing from the IAT table, which 
+could flagged by detection systems as suspicous but it didn't give me any 
+problems at all.
+
+The second method I would like to introduce is my original idea of writing
+a dll to memory and patching the address Kernel32 with the written DLL. In 
+my mind Windows 'might' just load the DLL, expecially if you kept the same
+name or even just by the address. 
+
+When it comes to imports the address if everything when it comes to loading
+functions. The names of the functions are merly strings that frequently get
+scanned by AV, expecially when making suspicous API calls.
+
+A way to avoid this completly would be to make direct system calls and even 
+resolving them dynamically like in syscall-killer.txt, but I like to abuse 
+other Windows features that are typically unseen. 
+
+This method provides a way to create "trusted" system calls to the system 
+without relying on direct calls, which can be flagged if used suspicously.
+Mixing these 2 techniques is the end goal.
+
+Checking the actual exported Dll names of the PE file, my DLL "evil.dll"
+is in place of Kernel32 completly removing it, but still allowing to call
+all of it exported functions with either GetProcAddress() or maunally mapping
+it. Below Is what my main function looks like 
+
+============================================================================
+
+int main() {
+    
+   WriteConsoleW_t vbirvuhrihg = getLocalImports("evil.dll", "WriteConsoleW");
+
+       if (vbirvuhrihg) {
+        HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+        DWORD charsWritten;
+        vbirvuhrihg(hConsole, L"Stealthy text\n", 15, &charsWritten, NULL);
+    }
+}
+
+============================================================================
+
+If you were to combine direct system calls and even a syscall-killer type
+method, this will tremendously reduce detection even if doing things like
+VirtualAllocEx -> WriteProcessMemory -> CreateThread. 
+
+This concludes my zine on identity-theft, not the typical identity theft 
+you may have been thinking, but nonetheless, identity-theft on Kernel32.
+
+Below is a link to the raw source code for you to tweak or share.
+
+See ya.
+
+-Sleepy
+
+[EOF]
