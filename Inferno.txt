@@ -1,12 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Inferno.txt</title>
+  <style>
+    body {
+      background-color: #000;
+      color: #fff;
+      font-family: monospace;
+      white-space: pre-wrap;
+      padding: 2rem;
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    a {
+      color: #80ffff;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
 This is the Inferno.
 Five circles deep. Five secrets.
-No salvation here, only blood and bytes
+No salvation here, only blood and bytes.
 
-[1] <a href="https://sleepyg8.github.io/Papers/xor-like-a-eagle.txt" target="_blank">XOR Like An Eagle</a>
-[2] <a href="https://sleepyg8.github.io/Papers/syscall-surgery.txt" target="_blank">Syscall-surgery.txt</a>
-[3] <a href="https://sleepyg8.github.io/Papers/Hookers.txt" target="_blank">Hookers.txt</a>
-[4] Soon
+[1] <a href="https://sleepyg8.github.io/Papers/xor-like-a-eagle.txt" target="_blank">XOR Like An Eagle</a>  
+[2] <a href="https://sleepyg8.github.io/Papers/syscall-surgery.txt" target="_blank">Syscall-surgery.txt</a>  
+[3] <a href="https://sleepyg8.github.io/Papers/Hookers.txt" target="_blank">Hookers.txt</a>  
+[4] Soon  
 [5] Soon
+</body>
+</html>
+
 
 
 
