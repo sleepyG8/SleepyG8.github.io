@@ -35,27 +35,6 @@ No salvation here, only blood and bytes.
 [5] Coming Soon
 </body>
 
-<script>
-  const cursor = document.createElement("span");
-  cursor.textContent = "_";
-  cursor.style.fontWeight = "bold";
-  cursor.style.animation = "blink 1s steps(2, start) infinite";
-
-  document.body.appendChild(cursor);
-
-  setInterval(() => {
-    document.body.appendChild(cursor); // Keep it pinned to bottom
-  }, 100);
-
-  const style = document.createElement("style");
-  style.textContent = `
-    @keyframes blink {
-      to { visibility: hidden; }
-    }
-  `;
-  document.head.appendChild(style);
-</script>
-
   
 </html>
 
