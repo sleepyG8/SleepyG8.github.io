@@ -1,0 +1,198 @@
+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+
+                Firedrill
+                 Sleepy
+                  2025
+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+
+
+So today I am going to be going over one of
+my personal favorite ways to "train". When I
+say "train", I mean sharpening your VX skills
+and testing yourself.
+
+I call this a firedrill.
+
+The goal of a firedrill is to write out a custom
+format, store some executable code inside of it, 
+and call it using some assembly all within one 
+sitting. Ive gotten down to about an hour for a 
+full chain.
+
+To begin, before even starting to write any code,
+lets walk through the mental model you will need
+to pull this off.
+
+1.  Create a main struct
+2.  Fill the struct entries with 0
+3.  Add new entries all in memory
+4.  After filling the struct, write to a file
+5.  Write a walker for the file, and call code
+
+With this high level overview we can get started
+wrtiing out a custom format, the more times you 
+write your own format, the faster you will get.
+
+I always start with a custom struct and a function
+to 0 it out.
+
+C:===============================================================
+
+typedef struct {
+    int offset;
+    char name[25];
+    int next;
+} format;
+
+format* entry;
+
+int makeFormatStruct(unsigned char* mem) {
+
+    entry = (format*)mem;
+
+    for (int i=0; i < 10; i++) {
+        strcpy(entry[i].name, "NULL");
+        entry[i].offset = 0;
+        entry[i].next = 0;
+    }
+
+}
+
+===============================================================
+
+In the code above, makeFormatStruct() main 
+purpose is to 0 out each entry inside of a 
+buffer on the stack, I made mine just over 2 
+pages to fit a couple entries with a lot of
+room for executable code.
+
+So what now? With our zeroed out struct, 
+we must write some actual entries into the 
+buffer. To achieve this, lets write a function
+that takes in some data and fills the superblock,
+along with writing the actual data to the supplied
+offset within the stack buffer.
+
+
+C:===============================================================
+
+int makeEntry(unsigned char* mem, int offset, char* name, int size, char* data) {
+    
+    for (int j=0; j < size; j++) {
+        mem[offset + j] = data[j];
+    }
+
+
+    for (int i=0; i < 10; i++) {
+        if (entry[i].offset == 0) {
+            strcpy(entry[i].name, name);
+            entry[i].offset = offset;
+            entry[i].next = offset + size;
+            puts("Wrote Entry");
+            return 0;
+        }
+    }
+}
+
+===============================================================
+
+This above function just fills in those zeroed out struct entries
+after finding the first entry with a 0 offset.
+
+With this struct and a few functions you can compile and start 
+storing code into a packed location in memory. But what about 
+reading? Well to read its very starightforward, below is a 
+simple walker I wrote to pull every entry. Next we will be 
+writing this memory blob to disk and writing a seperate 
+executable to load the code.
+
+C:===============================================================
+
+int readEntry(unsigned char* mem) {
+    for (int i=0; i < 10; i++) {
+        if (entry[i].offset !=0) {
+        printf("%s\n", entry[i].name);
+
+        int size = entry[i].next - entry[i].offset;
+
+        for (int j=0; j < size; j++) {
+            printf("%02X ", mem[entry[i].offset + j]);
+        }
+
+        printf("\n");
+
+        }
+    }
+}
+
+===============================================================
+
+After double checking that the writer and walker both work,
+lets write our entire memory blob to a file on disk. Heres my 
+main function and an example of writing the format to disk. 
+
+One cool thing I learned from all this, is that any format, 
+even an elf or PE file is just a struct from memory written 
+to a file on disk.
+
+C:===============================================================
+
+int main() {
+    unsigned char mem[10000];
+
+    makeFormatStruct(mem);
+
+    makeEntry(mem, 2000, "First", 9, "Christmas");
+    makeEntry(mem, 2010, "Second", 9, "Christmas");
+    makeEntry(mem, 2020, "Third", hexSize, Tired);
+
+    FILE* f = fopen("format.bin", "wb");
+
+    readEntry(mem);
+
+    fwrite(mem, 10000, 1, f);
+
+    fclose(f);
+    return 0;
+}
+
+===============================================================
+
+Now on disk you will have a file named format.bin or whatever 
+you changed it too. Now this is where I break into either asm 
+or a tight C loop to walk that file on disk and find the offset
+of our code and run it. The end goal is to store the format.bin
+into a header file and avoid all disk anyways, but its a good habit
+to test out your custom fromat from disk first.
+
+Below is the main function from this walker. Allocate is a function
+that walks the PEB on windows and resolves the DLL and its exports
+to dynamically call VirtualAlloc().
+
+C:===============================================================
+
+REDACTED - go to my server for full code
+
+=================================================================
+
+
+This Above code takes in a file from disk and then proceeds
+to iterate to the 3rd entry and retrun the offset of the code.
+
+The 7168 and 2464 can and will need swapped out for your actual
+payload size and entrypoint. But this code is what I used to 
+execute my reverse shell.
+
+This can be expanded on a whole lot. But this was just a 
+breakdown of my training excersize, and by the now you should
+have a new container to store your code into.
+
+Thats the best part about doing firedrills. After each session
+you will have a new unique loader for executing code on your own
+terms. Make a huge superblock, write a lot of code, add reserved[28]
+entries for obfucation, its up to you and your imagination to Create
+something that nobody else could make.
+
+Until next time :)
+
+- Sleepy, From the other side
+
+EOF
