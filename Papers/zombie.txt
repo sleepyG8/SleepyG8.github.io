@@ -1,0 +1,123 @@
+;Zombie
+;Sleepy 2026
+;Original post: https://github.com/sleepyG8/SleepyG8.github.io/new/main/Papers
+
+File Infection has always been an interesting form
+of persistence to me since I first stumbled onto it.
+
+Today, we are going to be going over infecting an 
+already running executable. There are serveral different
+ways to go about this. Ill be going over a few of my 
+favorites.
+
+Way One:
+=========================================================
+
+This method is the most basic, it involves suspending 
+a process and injecting code into it. One thing to keep 
+in mind, where do we want to inject? I prefer to patch 
+the entrypoint because this is the very first code to 
+execute after the loader does its thing.
+
+Overview:
+
+- Create a process suspended
+- Write to the entrypoint
+- Resume the process
+
+This results in a zombie process that runs as the infected
+process, but actually is running the new patched bytes at
+the entry.
+
+This is pretty trivial to implement, so I wont be
+providing code for this method. But dont worry there will 
+be code in the next two sections :)
+
+Now we will start getting into the fun stuff.
+
+Final Thread Injection:
+=========================================================
+
+Well, awhile back I dicovered that you can abuse the 
+thread loading order to find and Inject into the final
+thread that runs during process shutdown. This thread 
+only executes while the process is closing.
+
+The exit thread normally handles cleanup and finally 
+calls NtTerminate to finally end execution. But as I 
+have found out from some testing, you can tamper with
+the final threads registers. 
+
+I set the RIP register of the final thread after writing
+some code to a allocated region in the remote process.
+This means as soon as this thread is entered, it will run
+our code instead at whichever address gets allocated into.
+
+A cool thing about this, is it does not require you to 
+suspend the process, you can patch this thread live 
+because the code inside of it is not called to process 
+close.
+
+This also does not crash the target process.
+
+Heres a high level flow:
+
+- Open a handle to a remote process
+- Enumerate the final thread address
+- Open the thread handle
+- Change the RIP of the thread to code 
+- Exit the program
+
+I have found out that, normally, the final thread tends to
+be used for process shutdown and cleanup. Injecting into this 
+thread allows to overwrite the crt cleanup used.
+
+One limitation of this is that it works on gui programs perfectly,
+but commandline programs are a differnt story. When running a 
+program from commandline, It does not have the same shutdown 
+process as a gui. A commandline app, expecially when exited with
+ctrl+c, does not exit gracefully.
+
+Itch:
+=========================================================
+
+This works with all other function boundaries as well but ill be 
+focusing on the final functions start address.
+
+There is another way I have discovered to inject into a process
+exit thread, writing to the final function in the PE directory
+IMAGE_DIRECTORY_ENTRY_EXCEPTION.
+
+I discovered that when you inject code at the start of a function
+boundary, particularly the final function, It allows you to patch
+the process exit as well. Working primarily for gui apps, when the
+process is closed a payload is ran. 
+
+high level workflow:
+- Open a process handle
+- Get its base and find IMAGE_DIRECTORY_ENTRY_EXCEPTION in the 
+  optional headers data directory.
+- Walk all the _IMAGE_RUNTIME_FUNCTION_ENTRYs until you hit the 
+  final function.
+- Write code, starting at the first byte of the function.
+- Let process run
+- Exit and payload runs
+
+To get the final function entry, I used the following check:
+
+DWORD size = oh.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION].Size;
+for (DWORD i=0; i < size / sizeof(_IMAGE_RUNTIME_FUNCTION_ENTRY); i++) {
+      
+    if (i == ((size / sizeof(_IMAGE_RUNTIME_FUNCTION_ENTRY)) - 1)) {
+        // Write to function start of this one
+    }
+  }
+
+Writing to the start of this function allows for similar functionality
+as patching the final thread because they both hit the same code.
+
+One thing that I found interesting about patching the process close, is
+there really isnt much left when your code is hit and the process expects
+to die, but instead we can create new "life".
+
+[END]
