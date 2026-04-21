@@ -1,0 +1,69 @@
+================================================
+          double pumping the PEB
+               Sleepy 2026
+================================================
+
+Today I am going to be going over abusing avx
+instructions to hide intent and become invisible
+to virtual machines.
+
+Over and over again, I kept seeing instructions
+inside of programs disassembly that began with 
+"xmm", "zmm", "ymm", "vzrouper" and I decided to
+look deeper into why these are even used in modern
+programs.
+
+Avx instructions move more than one byte at a time,
+similar to "rep movsq", but with a huge advantage. 
+Avx instructions can also compare, add, xor, etc 
+to more than one byte at once. For example, the 
+avx-512 scheme enables 64 byte moves in a single 
+instruction per avx port, there is 2 of them. This
+means you can reliably pump 128 bytes in 2 instructions,
+this is known as a double pump.
+
+Virtual machines in fact to not support avx-512 instructions
+at all, and most older hardware pre-2020 and a majority of 
+laptops. Sure it wont run on most computers, but that is not
+the point, the point is to completly avoid the chance of your
+code every being sandboxed.
+
+I ended up writing a simple Windows based program that walks the 
+every so loved, PEB. The byte pattern that reading the PEB gives 
+out is annoyingly obvious. It sticks out like a soar thumb in a
+well written virus. By using avx registers, even avx2, can throw 
+of that signature trail that someone reversing the program would
+love to find.
+
+Heres an example use case:
+
+// This function just returns the peb address into a zmm register (avx-512)
+__m512i getPeb() {
+    return _mm512_load_si512((void*)__readgsqword(0x60));
+}
+
+Inside the main function, or whichever one you choose to resolve
+the PEB in, add this following code:
+
+int main() {
+__m512i zmm = getPeb();
+
+unsigned char base[64];
+_mm512_store_si512(base, zmm);
+
+// base is now your peb base address
+// Continue on with your normal code, or keep using avx
+
+MY_LDR_DATA_TABLE_ENTRY* ldr = *(void**)(base + 0x18);
+
+//...
+}    
+
+This code will not run inside of a virtual machine and you can
+safely add this to your shellcode.
+
+One thing to remember is a majority of computers do not support 
+avx-512 either, so the target must have the capable hardware to
+support these instructions. A double edged sword.
+
+[EOF]
