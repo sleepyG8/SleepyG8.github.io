@@ -1,0 +1,120 @@
+
+
+                 Brain
+              Sleepy 2026
+
+      Using the exception dispatchers 
+        guts to write shellcode...
+
+While writing up a extention that compares on disk
+ntdll exports to a remote processes exports I found 
+something interesting about ntdll. 
+
+No matter what, each ntdll loaded into a process 
+address space will differ. I ended up noticing a 
+function named KiUserInvertedFunctionTable.
+
+The function KiUserInvertedFunctionTable is a part
+of Windows exception handling. It acts as a fast 
+path for the OS to find function boundaries and
+also module bases. The exported address contains
+a list of struct entries, each one containing a 
+pointer to each LOADED module base at offset 0x18.
+The module base is not an rva and is actually a 
+pointer, and just so happens to be the final entry
+inside the struct.
+
+8 bytes before the module base at inside the struct 
+just so happens to be a pointer to the PE exception
+directory for EACH module. Meaning this allows for 
+effortlessly walking modules and discorvering functions
+without ever having to call gs:[60].
+
+There are some obvious reason on why I thought this
+was interesting. I knew that if I pattern scan for
+ntdll in memory and find the correct export, I would
+be able to dump the module bases without the need for 
+the PEB. 
+
+You can find ntdll however you want, but if you want a 
+solid way to get you started check out my paper Pebless.
+Pebless.txt goes over pattern scanning in memory for 
+module bases. This technique is an extention Pebless.
+
+To start out lets just find ntdll... for the sake of
+showing you I will just use GetModuleHandle() in this 
+POC.
+
+void* hNtdll = GetModuleHandle("ntdll.dll"); // thats it
+
+Now we will walk the exports of ntdll and find the func 
+exported under the name KiUserInvertedFunctionTable. 
+I wont be going over walking exports but heres the 
+example function that you can use.
+
+unsigned char* func = GetProcAddress(hNtdll, "KiUserInvertedFunctionTable");
+
+You dont really need to define a typedef for this because 
+we just need the exported address to get this following 
+structure. You can find this by dumping the bytes at the 
+returned address.
+
+04 00 00 00 00 02 00 00 0A 00 00 00 00 00 00 00 00 50 51 21 FD 7F 00 00 00 00 34 21 FD 7F 00 00
+
+Thats the struct right there ^^
+Check out the last 8 bytes, they are page aligned.
+0x00007FFD21340000
+
+This just so happens to be the first entry, which also,
+oddly enough is ntdll.
+
+The second entry is the base address of the process and
+the last entries finish out the loaded module list,
+including KERNEL32 at the third entry.
+
+One thing to keep in mind is this list ONLY contains
+select modules that the loader loads at process startup.
+
+My initial thought was, oh these are knownDlls only, but 
+after doing some more digging, I found that some processes
+that use networking or authentication will also have dlls 
+in this list like C:\Windows\SYSTEM32\SSPICLI.DLL.
+
+It is pretty easy to see only trusted dlls get loaded into 
+this path at startup. I am guessing the loader and exception
+handlers use these for fast lookups based on the name and 
+whats inside.
+
+04 00 00 00 00 02 00 00 0A 00 00 00 00 00 00 00 00 50 51 21 FD 7F 00 00 00 00 34 21 FD 7F 00 00 00 70 26 00 40 0A 
+01 00 00 40 9A 46 F7 7F 00 00 00 00 98 46 F7 7F 00 00 00 80 02 00 2C 13 00 00 00 60 FB 1D FD 7F 00 00 00 00 C1 1D
+FD 7F 00 00 00 40 3F 00 24 2C 01 00 00 10 CA 1F FD 7F 00 00 00 00 BE 1F FD 7F 00 00 00 90 0C 00 4C 47 00 00 00 00
+
+And here ill add some code. This gets the process base and
+also checks if the exception directory entry matches the 
+exported function from kernel32, which we find by referencing
+the 3rd entry inside of the above struct.
+
+//<ki> is our export address.
+
+void* baseAddress = 0;
+for (int i=1; ; i++) {
+    if (dllNum == 2) {
+    baseAddress = *(void**)((unsigned char*)ki + (0x18 * i));
+    }
+
+    void* dllBase = *(void**)((unsigned char*)ki + (0x18 * i));
+    if (ntdllBase == 0x00) break;
+
+    printf("0x%p\n", dllBase);
+
+}
+
+Remember: There is 2 pointers the first one is a pointer to the
+PE exception directory for the current module and the second is
+the module base.
+
+and you know what to do next... Not to bad :)
+
+- Sleepy 2026
+  
+[END]
