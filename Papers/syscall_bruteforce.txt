@@ -1,0 +1,91 @@
+
+
+              Syscall Bruteforce
+                  Sleepy 2026
+
+Recently, I have been working on building syscall
+stubs on Windows at runtime. One thing I constantly
+find myself having to do is retrieve the syscall 
+number ntdll loaded in memory.
+
+What if we didnt need ntdll at all? Not even to get
+the current syscall number. What if we bruteforce our
+way in?
+
+This is where I began thinking, typically the retreival 
+of these syscall numbers can be a noisy act in itself. So
+I decided to write up some C to do the opposite of what I 
+normally do... guess the syscall number.
+
+starting at 0, my plan was to patch the value into the 
+syscall number slot, the 4th byte of a syscall stub. Knowing
+that all of the syscalls would presumably fail, I would only
+exit the loop on a success. A success for NtAllocateVirtualMem
+being a successfull NT_SUCCESS on Windows.
+
+I had some bumps, some random functions were returning success
+or just plain hanging when called with my Allocate parameters
+setup in the registers. I just skipped the ones that hung, and 
+it was only 3. NtClose, CsrCaptureTimeout, and --
+NtLockProductActivationKeys. 
+
+On my current version of Windows, the syscall number of 
+NtAllocateVirtualMem is 0x18. Meaning my loop would need to be 
+able to pass over at least 23 iterations before it could stop.
+
+How I did it:
+
+Like I said before, every Windows syscall stub layout is the 
+exact same for every Nt syscall. The only byte that changes is
+the 4th byte which is the syscall number. This stub is sent to
+KiSystemCall64 in the kernel when a syscall instruction is 
+executed. Acting as a redirector for the SSDT, even though it 
+doesnt do anyting but place rcx into r10. rcx being the syscall
+number placed into eax during a syscall in usermode.
+
+Knowing this I put the Stub with a 0x00 in place of the syscall 
+number into a buffer. Then I proceeded to modify that stub in 
+memory and call it with the proper NtAllocateVirtualMem 
+parameters. 
+
+What is cool about this is statically the person trying to RE 
+the program would have a hard time knowing which syscall is 
+being called because there is 0 strings involved and it attempts
+to execute on each new stub. They would need to catch it at
+runtime. 
+
+Heres an example:
+
+for (int i=0; i < 500; i++) {
+
+    unsigned char syscall[32];
+    stub(i, &syscall);                      ; Returns the syscall stub with i as the syscall number
+
+    Ntalloc alloc = (Ntalloc)syscall;  
+
+    DWORD old;
+    VirtualProtect(syscall, sizeof(syscall), 0x40, &old);   ; Make exec
+
+    if (i == 4 || i == 15 || i == 21) continue;             ; Skip bad ones, take note here
+
+    void* status = alloc(-1, &base, 0, &regionSize, 0x3000, 0x40);
+        
+    if (NT_SUCCESS(status)) {                               ; If succuess return base
+    return (void*)base;
+    }
+
+}
+
+Now you have a primed executable buffer without having to
+walk ntdlls exports. Structureless.
+
+Rusty, battered, but not broken.
+
+Keep being you.
+
+Till next time.
+
+END
+
+
+
