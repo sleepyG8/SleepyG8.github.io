@@ -1,0 +1,72 @@
+===============================================
+                   Sleddin
+                 Sleepy 2026
+===============================================
+
+Today I am going to be going over an interesting
+evasion technique. It involves using a huge nop
+sled to control execution.
+
+The goal is to never have your code be injected into
+the same offset twice.
+
+Starting out, lets say a jump stub at the entry 
+point to your code isnt enough for you, to noisy.
+What about clearing the stub out after? still dont
+want to? Well I got your solution right here.
+
+Ive sampled with using NOPs in the past to create
+polymorphic execution and using the filler as 
+possible places to put code.
+
+I will be going over how to do it yourself:
+
+Start by creating a process suspended.
+
+I started by getting the base address and then
+walking the process like a PE from that base to 
+grab the entrypoint.
+
+After grabbing the entry I wrote 0x2000 NOPs (0x90)
+starting at the entry. I then continued on by writing
+my payload inside the NOPs at a random location.
+
+When I say random location, I mean you can have your 
+infector store the payload at a differnt location
+each time it infects a file or running process. 
+
+Yes you heard that right, this works the same for 
+both in memory infection and also on disk file 
+infection. Were just sledding right into our payload.
+
+Because there are NOPs before the payload it does not
+matter how far from the entry you place your code, just
+do not place it so close to the end that your payload 
+gets cut off.
+
+Starting at the entry it should look like this:
+
+0x90 0x90 0x90 0x90 ... -> [Payload] -> Code from OG process
+
+One way to make this better is to write the original
+bytes back to the entry once your payload runs and 
+just re call the entry or jmp to it.
+
+Replacing the original code would mean someone trying
+to reverse your virus would need to watch for new 
+processes being created and break before the stub 
+gets swapped back. From a normal user standpoint, 
+the process will just start normally and there will
+be no signs that the entry was infected.
+
+Not to complicated to implement, so ill end it here.
+
+see you next time :)
+
+END
+
+
+
+
+
+
