@@ -1,0 +1,189 @@
+
+
+                sfumato
+              Sleepy 2026
+
+
+Recently, while walking through some ntdll 
+internals, I came across a reference to 
+gs:[0x17c8]. Not sure what lived that high
+inside the TEB range, I decided to investigate
+further.
+
+And in usual Windows fashion, what I thought might
+by a flag check or perhaps something deeper, turned
+out to be a rabbit hole I have been traversing for
+the last few weeks.
+
+If you were to dump memory at gs:[17c8], you would
+find 2 pointers back to back, a typical linked list.
+But when walking linked list entries by flink, I 
+noticed that in the very first entry right after the
+linked list head at offset 0x10 is yet another pointer.
+
+Here is the head:
+10 F9 ED A4 BF 01 00 00 10 F9 ED A4 
+BF 01 00 00 02 00 00 00
+
+Following .Flink:
+
+GlyphDbg>>10 F9 ED A4 BF 01 00 00
+[!] Read Memory - Base: 000001BFA4EDF910
+[+] Raw: 
+78 CE A6 02 F9 7F 00 00 78 CE A6 02 
+F9 7F 00 00 70 F9 ED A4 BF 01 00 00 <<<<< HERE last 8 bytes
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 01 00 00 00 
+00 00 00 00 49 8C B7 B5 11 13 00 08 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 20 61 41 06 F7 7F 00 00 
+00 FA ED A4 BF 01 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 7D 8C B7 81 1E 13 00 08 
+90 B3 40 06 F7 7F 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 01 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 E0 0F EE A4 BF 01 00 00 
+70 57 41 06 F7 7F 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 43 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+
+GlyphDbg>>70 F9 ED A4 BF 01 00 00
+[!] Read Memory - Base: 000001BFA4EDF970
+[+] Raw: 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 20 61 41 06 F7 7F 00 00 <<<< HERE last 8 bytes
+00 FA ED A4 BF 01 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00
+
+GlyphDbg>>20 61 41 06 F7 7F 00 00
+[!] Read Memory - Base: 00007FF706416120
+[+] Raw: 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+FE FF FF FF 00 00 00 00 FF FF FF FF 
+FF FF FF FF FF FF FF FF 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 A0 0F 00 00 00 00 00 00 
+01 00 00 00 00 00 00 00 00 00 16 00 
+F9 7F 00 00 00 00 16 00 F9 7F 00 00 <<<< WE STRUCT GOLD!
+00 00 00 00 00 00 00 00 D0 68 25 00 
+F9 7F 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 80 16 21 00 
+F9 7F 00 00 70 2D 22 00 F9 7F 00 00 
+00 00 00 00 00 00 00 00 01 00 00 00 
+00 00 00 00 35 A6 06 1D 75 EA 00 00 
+
+
+That is a nice alligned pointer right there at offset
+0xB8. Well take a look at what the pointer resolves too.
+
+------[+]Pointers:------
+[+] C:\Windows\System32\KERNELBASE.dll
+Pointer found: 0x00007FF900160000 RVA: [00000000000000B0]
+[+] C:\Windows\System32\KERNELBASE.dll
+Pointer found: 0x00007FF900160000 RVA: [00000000000000B8]
+Pointer found: 0x00007FF9002568D0 RVA: [00000000000000C8]
+Pointer found: 0x00007FF900211680 RVA: [00000000000000E0]
+Pointer found: 0x00007FF900222D70 RVA: [00000000000000E8]
+Pointer found: 0x00007FF706416230 RVA: [0000000000000250]        Section: .data
+
+Two for some reason? But nonetheless, a reliable
+pointer into a DLL with a lot of breadth. Lets 
+just take a look at what we can dynamically load.
+
+VirtualProtect - 0x00007FF90021E700
+VirtualAlloc - 0x00007FF900215120
+
+These 2 are bread and butter. You dont need anything
+else for a loader and really you only need VirtualProtect
+for mutating code... and switching protections around.
+
+So I ended up writing some shellcode using this method.
+
+And as I expected, this works like a charm. I did do 
+version testing on my VM and it worked with 0 changes.
+
+This code walks what I infer is the tls expansion 
+slot per thread, gets KERNELBASE.Dll and resolves
+the desired export... I mean after all this I am 
+sure you can either learn, or already know how to 
+resolve exports. So, Ill just be showing the new stuff.
+
+void* getBase() {
+
+void* point = __readgsqword(0x17c8);
+if (point == 00) return 0;
+
+void* next = *(unsigned long long**)point;  // pointer to tls slots
+
+void* tlsSlot = *(unsigned long long**)((unsigned char*)next+8); // linked list go to next
+                                                
+void* onto = *(unsigned long long**)((unsigned char*)tlsSlot);
+
+LIST_ENTRY* head = (LIST_ENTRY*)onto;
+LIST_ENTRY* cur = head->Flink;
+
+for (int i=0; ; i++) {
+
+    if (cur == head) {
+        break;
+    }
+
+    unsigned long long dllStruct = *(unsigned long long**)((unsigned char*)cur + 16);
+    unsigned long long dllList = *(unsigned long long**)((unsigned char*)dllStruct + 16);
+
+    for (int i=0; i < 500; i+=8) {
+    unsigned long long kernelBase = (*(unsigned long long**)((unsigned char*)dllList+i));
+
+    if (((kernelBase >> 40) & 0xFF) == 0x7F && (kernelBase & 0xFFFF) == 00) {
+
+    printf("%p\n", *(unsigned long long**)((unsigned char*)dllList+i));  // print slot
+
+    return *(unsigned long long**)((unsigned char*)dllList+i);
+    }
+
+    }
+
+    cur = cur->Flink;
+}
+
+return 0;
+}
+
+This above function returns the KERNELBASE base address 
+which can be used to dynamically load functions.
+
+Till we meet again...
+
+-Sleepy 
+
+END
