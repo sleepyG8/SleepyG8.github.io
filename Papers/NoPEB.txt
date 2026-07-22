@@ -1,0 +1,84 @@
+
+�������������������������
+                No Peb
+                Sleepy
+                 2026
+�������������������������
+
+I read a paper awhile back called, 
+
+"Simplest way for get KERNEL32 base address"
+
+By a wise guy Billy Belceb�. This sparked
+something in my mind...
+
+There paper talked about walking the entire
+address space searching for MZ signatures,
+page by page. Because, even a DLL in memory,
+is page aligned on Windows.
+
+Whats cool about this shellcode technique is
+back in the early 2000s/Late 90s, people 
+didnt know about the PEB/LDR list. It made
+me think, to this day we dont really need the
+PEB to find Kernel32.
+
+Billy talked about walking from BFF8XXXXh, on
+32 bit Windows. Well its 2026 now and a majority
+of Windows versions run on 64 bit, so we have to 
+adjust our tactics. We must use the common DLL 
+range 7FFXXXXXXXXXh :)
+
+So I made a function to do our export walk and
+check a given base for a MZ sig. Pretty easy,
+but what about bad pages. Well I had to use a 
+SEH handler and only check for an MZ header when
+the system didnt fault.
+
+This still left a huge range of addreses that
+KERNEL32 could be. Windows might run in 64 bit 
+now and have a higher range, but PCs are a hell 
+of a lot stronger now than ever before. Lets 
+bruteforce our old friend KERNEL32.
+
+Im pretty sure (assuming you can code C) you can
+figure out how to find a MZ header on a PE. Well 
+if not, just read the first 2 bytes of the entire
+page. Then onto the nt headers at base + 0x3C.
+
+Most of the time, if your careful, you only really
+need to create an executable region, or just make
+a single API call, to get the job done. I often 
+just resolve VirtualAlloc and call it a day, for
+a loader.
+
+C:================================================
+
+// Pass in each page into base
+void* getmem(unsigned char* base) {
+
+    for (;;) {
+        
+        __try {
+        // Checks for MZ and finds function
+        void* retAddress = getFunc(base);
+
+        // Return if getFunc() found func
+        if (retAddress) return retAddress; 
+        }
+        __except(1) {
+        }
+
+        base += 0x1000; // Move to next region 
+
+    }
+
+}
+
+END================================================
+
+Pretty cool...
+
+- See ya! 
+
+EOF
