@@ -1,0 +1,52 @@
+====================================================
+    Using the Clipboard as a loader on Windows
+                 Sleepy 2026
+====================================================
+
+One thing about the clipboard that makes it special 
+is the fact that its buffer is global, meaning every
+process shares this same buffer. Today we are going 
+to be abusing that.
+
+Well as it turns out, just like any other memory buffer
+that is large enough to hold our code, we can store our
+payload in this location. Storing our payload here
+allows for a universal shared buffer that can be used
+as an alternative form of execution.
+
+I ended up writing some C to hook the clipboard and wait
+for payload to be copied. I decided to make it more robust
+and have it check for 0000 at the end of the code blob and 
+also a check on the very first byte to make sure it matches 
+up with the payloads first byte. This is so only the desired
+code is executed and nothing else copied to the clipboard.
+
+I kept my payload inside of a file, encrypted, named code.txt.
+The job of our program is to hook the clipboard and wait for 
+this exact code to be copied, using delimiters, and then 
+decrypt the code and call the entrypoint.
+
+This technique is expecially usefull for post exploitation, 
+allowing for multiple payloads to be chained back to back 
+with a single loader running in the background thats 
+always watching for payloads to enter.
+
+After some testing, I ended up using that encrypted .txt file
+and piping it to clip.exe. As soon as the encrypted payload 
+enters the clipboard buffer, it runs.
+
+I brought up post exploitation before... well if you get a shell
+on a machine and want to run lets say lsass dumper. Run the clip
+jacker and utilize clip.exe to keep executing payloads that can 
+be pulled from anywhere you can think of.
+
+Whats expecially cool about this method, if payloads can be copied
+from just about anywhere, even a webserver. If someone were to host 
+an encrypted payload on a server, the user would have to just copy 
+it, unknowingly, and as long as the clip jacker is running the code 
+will run.
+
+Well thats all for this one and I hope you leave with a differnt 
+view of the clipboard after this.
+
+END
