@@ -1,0 +1,59 @@
+
+
+        Art and Bytes
+         Sleepy 2026
+
+To me, there has always been a close
+correlation between well written software
+and fine art.
+
+On one end you have artist, who live on 
+turning mistakes into a masterpiece. Art 
+is not one dimentional, it is up to the 
+person experiencing it to understand the 
+differnt blending techniques and visual 
+styles that at one point in time were 
+thought to be "Different", so they were 
+pushed aside for years.
+
+Take Da Vinci for instance... He lived a 
+highly unconventional lifestyle and died
+with 0 fame. It was not until over 200 
+years after he died, that his lifes work
+the Mona Lisa was put into a kings chambers.
+Actually, it was the "chambers" aka the 
+bathroom. 
+
+You have to think... The renaissance was 
+full of art that was "fine lined" and normally
+followed the same principles. 
+
+Then you have Code, which is built more similar
+to fine art than you may think.
+
+Art is layers on layers to get the right look. 
+Well Code is even more layers to get the right 
+look. 
+
+When writing tight loops or pretty much anything
+it is good to have a general plan of what your 
+going to even do, but typically the power comes
+in freestyling.
+
+When freestyling code and just writing as you go,
+you may tend to suprise yourself. Sometimes our 
+logical brain ignores intuition in seek of other 
+answers. Intuition and what your brain "thinks" 
+will work might lead you to some shocking things.
+
+You might start writing code, fall asleep, wake up
+and see wtf was I doing? And realize you created 
+something your awake brain has to put together.
+
+Thats where I got the name Sleepy. Because some of
+the best work comes from your soul when your body 
+feels to tired to carry on.
+
+Dont be afraid to do something different...
+
+-Sleepy
