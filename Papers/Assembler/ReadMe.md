@@ -1,4 +1,4 @@
-#Zazm:
+Zazm:
 =======================================
 
 For detailed docs please see, Assemblerdocs.txt.
