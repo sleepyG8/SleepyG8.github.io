@@ -4,6 +4,7 @@ Chapter 1: Getting Started
 Chapter 2: quirks
 Chapter 3: Using Imports
 Chapter 4: Debugging
+Chapter 5: Macros
 
 Getting Started:
 =======================================
@@ -178,3 +179,46 @@ EFlags: 00010246
 
 Giving native IDE features built right into
 the assembler.
+
+Macros:
+=======================================
+
+This assembler comes with some built in features
+I would like to go into depth about.
+
+- Storing Bytes -
+
+Zazm accepts 3 differnt ways to store bytes into a
+buffer. 
+
+unsigned char A[] = {... } (Leave once extra space at the end for the parser) 
+
+A dq 4096
+
+A db "Manual",0
+B $ - A
+
+- .inc files -
+
+I kept the name .inc but they are not your usual inc
+you would find for different assembler. This assembler
+can have a:
+
+#include <asm.inc>
+
+apended to the top of your code to include a file 
+containing "unsigned char A[] = {... }" entries 
+containing data, code, or both.
+
+This is how you use reusable functions in Zazm. 
+You can add your own code into the inc file with
+programs written in Zazm. There will be some 
+included files as well to get you started.
+
+Functions:
+=======================================
+
+
+
+
+
