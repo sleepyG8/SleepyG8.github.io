@@ -1,0 +1,30 @@
+lea rax, [A]
+mov rax, [rax]
+lea rcx, [C]
+call(40)
+
+mov r10, rax    ;; LoadLibraryA res
+
+lea rax, [B]
+mov rax, [rax]
+mov rcx, r10
+lea rdx, [D]
+call(32)
+
+xor rcx, rcx
+lea rdx, [F]
+lea rsi, [E]
+mov r14, rsi
+mov r15, 0
+call(40)
+
+ret
+
+A gf LoadLibraryA
+B gf GetProcAddress
+C db "User32.dll"
+D db "MessageBoxA"
+E db "Message Box:"
+F db "Hello From Assembler :)"
+
+END
