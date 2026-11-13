@@ -1,0 +1,102 @@
+
+            Finding Purpose
+              Sleepy 2026
+
+Today, I have been working on an experimental
+injector. 
+
+This injector is quite differnt than you average
+injector because it does not inject into a file
+or a process.
+
+Today we are going to be injecting into ourselves.
+
+The PE exception directory hold a structure that 
+contains all of the functions inside a binary. This
+is useful for plenty of reasons... but a lot of those
+functions either get called early before the entry or 
+very late in the process lifetime.
+
+I thought this. Instead of allocating more memory in 
+the loader, why dont I just repurpose those dead 
+functions?
+
+I ended up writing a loader that searches all of the 
+_IMAGE_RUNTIME_FUNCTION_ENTRY inside of the 
+IMAGE_DIRECTORY_ENTRY_EXCEPTION directory inside our-
+selves in memory.
+
+some code: // this returns the 2nd to last function
+
+[C] // pass the PE base in memory of ourselves
+
+unsigned char* getfunctions(unsigned char* buff) {
+    
+    IMAGE_DOS_HEADER* header = (IMAGE_DOS_HEADER*)buff;
+
+    IMAGE_NT_HEADERS* nt = (IMAGE_NT_HEADERS*)((BYTE*)buff + header->e_lfanew);
+
+    IMAGE_OPTIONAL_HEADER* oh = (IMAGE_OPTIONAL_HEADER*)&nt->OptionalHeader;
+
+    DWORD rva = oh->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION].VirtualAddress;
+    DWORD idSize = oh->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION].Size;
+
+    _IMAGE_RUNTIME_FUNCTION_ENTRY* id = (_IMAGE_RUNTIME_FUNCTION_ENTRY*)(buff + rva);
+
+    for (int i=0; i <  idSize / sizeof(_IMAGE_RUNTIME_FUNCTION_ENTRY); i++) {
+    DWORD begin = id[i].BeginAddress;
+    DWORD end = id[i].EndAddress;
+
+    if (i > idSize / sizeof(_IMAGE_RUNTIME_FUNCTION_ENTRY) - 2) {
+        printf("Begin: %p\nEnd: %p\nsize: %lu\n", buff + begin , buff + end, end - begin);
+        return buff + begin;
+    }
+}
+}
+[EOC]
+
+After getting the last function, the size may need
+to be larger in order to fit our code. I have also 
+sampled with filtering functions by size as well, 
+but for this example I just used a 21 byte stub 
+to pull the process params.
+
+The bigger a function you can find inside of a PE,
+the more code you can fit obv.
+
+Running it:
+=====================================================
+
+Once you grab a function from the last couple functions
+in the list, you can chnage the protections and then 
+write your code to that address.
+
+I ended up doing this:
+
+[C]
+unsigned char* writeTo = getfunctions(*(unsigned long long**)(peb + 0x10));
+
+int old = 0;
+if (!VirtualProtect(writeTo, sizeof(tmp), PAGE_READWRITE, &old)) {
+    printf("error\n");
+    return 0;
+}
+   
+__movsb(writeTo, tmp, sizeof(tmp));
+
+VirtualProtect(writeTo, sizeof(tmp), old, &old);
+
+int (*exec)() = writeTo;
+void* res = exec();
+printf("%p\n", res);
+
+return 0;
+[EOC]
+
+ohh and before I forget I used this payload. This 
+payload pulls the process parameters for fun.
+
+[payload built with zazm]
+unsigned char tmp[] = {0x65, 0x48, 0x8B, 0x04, 0x25, 0x60, 0x00, 0x00, 0x00, 0x48, 0x8B, 0x40, 0x20, 0x48, 0x8B, 0x40, 0x78, 0xC3 };
+
+

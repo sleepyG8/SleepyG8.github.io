@@ -1,0 +1,66 @@
+
+
+            Electric Avenue
+              Sleepy 2026
+
+Yesterday I had a thought cross my mind... a 
+rather intriguing one at that. I thought "hmm,
+I what if I patch the PEB in just the right 
+place so that the linked list would return to 
+the head early".
+
+Normally I just 0 out everything if I want to 
+remove a single entry, but the thing is, it 
+is pretty noticeable.
+
+A linked list legit is just a circular list
+that is walked by [head+0] aka .flink which
+inevitably loops back around the the original
+head per the term "circular"
+
+Lets say we have 10 entries inside of a linked
+list. Well I had a thought... what I swap the,
+lets just say, 3rd entries .flink to point 
+towards the head? Making walking the linked
+list to only show 3 entries and then loop back.
+
+Below I will provide some asm that does exactly 
+that. It will walk the PEB and force the ldr list
+to only have 3 entries no matter how many Dlls get 
+loaded.
+
+You can do this on whichever entry you want, but 
+cutting it off after kernel32 just makes sense for
+this example.
+
+peb
+mov rax, [rax+24]
+mov rax, [rax+16]
+mov rsi, rax            ; store head
+mov rax, [rax]
+mov rax, [rax]
+mov [rax], rsi          ; patch .flink of kernel32
+mov rax, [rax+48]       ; Return kernel32 Base
+ret
+END
+
+If you run this in Zazm, or convert it to a different
+assemblers format, then youll get a PIC blob that can
+be ran anywhere in memory to patch all the loaded Dlls
+of the current process. 
+
+Im not going to be going into the upsides of this tech
+because its pretty obvious why hiding loaded dlls is 
+a good offensive move.
+
+I will, however, be going over the bad and the ugly.
+
+Obviously any DLL in memory, linked list or not, will
+still be in memory somewhere around the common dll range
+and will be a huge red flag to memory scanners.
+
+Choose to use wisely.
+
+-Sleepy 
+
+END

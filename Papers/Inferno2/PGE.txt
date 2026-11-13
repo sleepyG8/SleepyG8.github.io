@@ -1,0 +1,223 @@
+
+
+        PGE - Pretty Good Encryption
+                Sleepy 2026
+
+
+Recently I have been working with using stego to
+hide payloads. Some may think hiding your reverse 
+shell inside the picture of a duck as pointless, I 
+beg to differ.
+
+There are several ways to go about hiding data inside
+of an image file. One way is to append data to the end 
+of the file after the EOF marker. The second way is to 
+use the coefficients. 
+
+Appending data to the end of a file seems rather obvious 
+for the easy route, but thanks to a helpful tool called 
+Outguess, the latter is just as easy.
+
+I had a thought cross my mind... What if I were to encrypt 
+the JPG file after it had already been embeded with data
+using the coefficients. This would mean that anyone wanting 
+to decrypt the message/payload would need to go through 2 
+seperate stages to crack it.
+
+Overkill maybe, but there are a few layers here I would like 
+to go over.
+
+There are a few advantages I would like to discuss for using
+this method.
+
+1: Coefficient stego is hard itself to crack. The reason it is 
+a pain to crack is because it can give a lot of false positives.
+For instance when the string "password" and "schoolbus" could both
+extract "valid looking" payloads.
+
+2: The person trying to decrypt the code would not even know that
+after cracking the first layer there are 2 more.
+
+3. This can be stacked and more than one payload can be hidden per
+JPG
+
+First thing first is running your payload/message through your
+favorite stego tool. Mine is Outguess so ill be using that.
+
+outguess -k RandomPass -d test.secret <jpg> <outJpg>
+
+This command embeded out secret message from test into whatver
+you want to put for your out file name.
+
+Now it is time to encrypt the JPG. Awhile back I wrote a paper
+called Xor Like An Eagle that was just a basic one time pad 
+encryption scheme. You can either use something like that... 
+or I will be providing the source to my tool... Bitflip.
+
+The Bitflip source will allow for encrypting JPG file after 
+already running them through a stego tool.
+
+Here is an example one liner that can be used with Bitflip:
+
+echo "Hello Fuckers" > test.secret | outguess -k RandomPass -d test.secret <Place Real JPG Path Here> test.jpg | ./a.out -encrypt test.jpg wow.jpg RandomPass
+
+and for decryption...
+
+./a.out -decrypt wow.jpg RandomPass & outguess -k RandomPass decrypt.jpg -r test.bin && cat test.bin
+
+BitFlip Source:
+
+#include <Windows.h>
+#include <stdio.h>
+
+typedef struct compressor {
+    unsigned char byte;
+    int amount;
+} compressor;
+
+unsigned char rollLeft(unsigned char data, int n) {
+   return data << n | (data << (8 - n));
+}
+
+unsigned char rollRight(unsigned char data, int n) {
+   return data >> n | (data >> (8 - n));
+}
+
+int xorString(unsigned char* pass, unsigned char byte) {
+
+    for (int i=0; i < strlen(pass); i++) {
+        byte ^= pass[i];
+    }
+
+    return byte;
+
+}
+
+int swapper(void* inStruct, int size, unsigned char* setup, unsigned char undo) {
+
+    for (int p=0; p < size; p++) {
+
+            ((unsigned char*)inStruct)[p] = rollRight(((unsigned char*)inStruct)[p], 8);
+            ((unsigned char*)inStruct)[p] = xorString(setup, ((unsigned char*)inStruct)[p]);
+            ((unsigned char*)inStruct)[p] = rollLeft(((unsigned char*)inStruct)[p], 8);
+
+    }
+        
+    return 0;
+}
+
+unsigned char bits[9];
+unsigned char* getBits(char* string, int num, int flip) {
+
+    int bitCount = 0;
+    for (int i=0; i < 8; i++) {
+        bits[bitCount++] = (string[num] >> i) & 1;
+    }
+
+    if (flip == 1) {
+    bits[3] ^= 1;
+    }
+
+    if (flip == 0) {
+    *(unsigned long long**)bits = _byteswap_uint64(*(unsigned long long**)bits);
+    bits[3] ^= 1;
+    *(unsigned long long**)bits = _byteswap_uint64(*(unsigned long long**)bits);
+    }
+
+    return bits;
+
+}
+
+int encode(unsigned char* string, unsigned char* newByte, int len) {
+
+    for (int p=0; p < len; p++) {
+    
+    newByte[p] = 00;
+
+    getBits(string, p, 1);
+
+    for (int i=0; i < 8; i++) {
+        newByte[p] |= (bits[i] & 1) << (7 - i);
+    }
+ 
+    }
+
+}
+
+int decode(unsigned char* newByte, int len) {
+
+    for (int p=0; p < len; p++) {
+
+    getBits(newByte, p, 0);
+
+    unsigned char decbyte = 0;
+    for (int i=0; i < 8; i++) {
+        decbyte |= (bits[i] & 1) << (7 - i);
+    }
+
+    newByte[p] = decbyte;
+
+    }
+
+
+}
+
+int main(int argc, char* argv[]) {
+
+    if (argc < 3) return 0;
+
+    FILE* f = fopen(argv[2], "rb");
+    if (!f) return 3;
+
+    fseek(f, 0, SEEK_END);
+    int size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    unsigned char* string = malloc(size);
+    fread(string, 1, size, f);
+
+    if (strcmp(argv[1], "-encrypt") == 0) {
+
+    unsigned char* out = malloc(size);
+
+    encode(string, out, size);
+
+    printf("unsigned char enc[] = { ");
+    for (int i=0; i < size; i++) {
+        if (i == size - 1) {
+        printf("0x%02X };\n\n", out[i]);
+        break;
+        }
+        printf("0x%02X, ", out[i]);
+    }
+
+    printf("int size = %lu\n\n", size);
+
+    swapper(out, size, argv[4], 0);
+
+    FILE* o = fopen(argv[3], "wb");
+    fwrite(out, 1, size, o);
+    return 1;
+    }
+
+    if (strcmp(argv[1], "-decrypt") == 0) {
+
+    swapper(string, size, argv[3], 0);
+
+    decode(string, size);
+
+    printf("%s\n", string);
+
+    if (argv[2][strlen(argv[2] - 3)] == 'j') {
+
+    FILE* o = fopen("decrypt.jpg", "wb");
+
+    fwrite(string, size, 1, o);
+    }
+
+    return 1;
+    }
+
+
+    return 0;
+}

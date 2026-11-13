@@ -1,0 +1,277 @@
+; polymorphic execution and abusing control flow
+; Sleepy 2026
+; Was a tmp.Out submission
+
+DIRECTORY
+*************************************************
+\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
+[1] STARTING OUT - Controling flow 
+[2] GOING DEEPER - Covering our tracks 
+[3] TO FAR GONE  - Polymorphic Recursive jmp chain
+\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
+*************************************************
+
+This paper expects that are capable of finding
+imported function entries, working with raw bytes,
+and are comfortable writing loaders. It works its
+way through my creation of this technique.
+
+From [1] - [3] it will gradually become more complex.
+
+My workflow went in the same pattern, I originally 
+started out with a basic hook and gradually added 
+obfuscation till it felt about right.
+
+[1]STARTING OUT
+=================================================
+Today I am going to be going over my take on 
+polymorphic execution, and a recent insight
+I have found on abusing exceptions to make 
+self modifying code.
+
+Starting out... I needed a way to have a
+program break at the entry for my debugger,
+I ended up using a suspended process and
+writing a software breakpoint to the very
+first byte at the entry, a 0xCC. 
+
+Writing a 0xCC at the entry makes the process
+throw an exception when it is hit, being as it 
+is the very first instruction to run after the
+loader sets up the enviorment, it will break 
+after loader setup but before any code has ran.
+A lot of times when creating a process with the 
+suspended flag, the loader has not finished 
+initializing.
+
+Well while writing this for my debugger, I had a 
+thought, what if I were to write a breakpoint at
+the entry of a process, but never advancing RIP 
+and changing the code at the entry each run, inside
+of the handler.
+
+If you have never messed with VEH, after an exception,
+the same exact byte that threw an exception executes 
+again. This instruction will continue to execute until
+RIP is advanced manually inside of the handler. Lets 
+not do that, lets use the same exact bytes but switch 
+them on the fly.
+
+This will make it so each time the entry is called, 
+differnt code will be executed.
+
+Because the entry hits only once, I decided to create
+a loader that calls the entry again mid execution, 
+after writing a 0xCC to the first byte at the entry.
+
+You can call entry either with a jmp or the good 'ol
+
+((void(*)())entry)();
+
+I decided that inside of my handler, I should write a
+jmp stub to the entry next so that it will jump to my
+code in memory, this would mean its the next instruction 
+to execute after the handler finishes, is the new jmp
+stub aka the payload.
+
+[2]GOING DEEPER
+=======================================================
+
+I decided not to stop here. 
+
+I have the handler executing code by writing a 0xCC to the 
+entry and returning execution to the new jmp to finally
+execute the final payload, but there is one forensic issue.
+If someone were to read the bytes at the entry, attempting 
+to RE this, they would see a very suspsicous jmp stub if
+they read it after the payload executed.
+
+Lets fix that...
+
+Lets single stop once after our initial handler had been hit
+and overwrite the jmp stub with either 0s or the original
+bytes. This would make it so that only our jmp stub will
+only be there in between the original handler and the 
+single step.
+
+We are using a single step as a cleanup for our stub and 
+covering our tracks.
+
+From a static standpoint, an EDR will not see the bytes 
+prior to execution, and will only have a very tight timeframe
+to find the patches in memory before they are restored.
+
+From a dynamic standpoint, an EDR would need to be doing 
+constant memory scans of the process and catch the jmp stub
+in between exceptions. Keep in mind, that all this happnes in
+under a second, leaving the patched code at the entry for only
+the time it is being executed.
+
+Heres what the entry should look like throughout the process:
+
+CC 83 EC 28 E8 EB 04 00 00 48 83 C4  ; Breakpoint wrote 0xCC
+
+[HANDLER] Sets entry as a jmp and continues execution and sets
+the trap flag to single step
+
+48 B8 60 41 AE 41 F7 7F 00 00 FF E0  ; Single step is the jmp
+
+[SINGLE STEP] overwrite the stub and continue execution
+
+00 00 00 00 00 00 00 00 00 00 FF E0  ; ENDING 
+
+Orginal code continues...
+
+I hope this paper gave you a new perpective on exceptions
+and using them to control, control flow. Im sure you can 
+think of a way to make this better, I thought of this as I
+was writing something else and just went with it, until I
+got it working.
+
+[3]TO FAR GONE:
+==========================================================
+
+Well I was going to end it here, but after doing some testing,
+I have found another way to abuse control flow in a similar
+manner.  
+
+So sure patching in 0xCC at the entry is solid, but what if
+we were to patch one at the first byte at a function address.
+Better yet lets ditch those exceptions. Lets use a jmp stub     
+instead.
+
+I ended up writing a loader, thats fully position independant,
+that patches in a jmp instruction at a desired function address.
+But It doesnt just patch at the first byte.
+
+Ill walk you through a high level overview:
+<func at 0x0007FF8??????>
+[Create a nop sled of 34 bytes or whatever]
+[fill nop sled at a random offset with a jmp stub]
+[Write to first 34 bytes of a function]
+[Call function recursively until parameters meet up on the jmp stub]
+[Repeat as much as you want by just swapping the destination in the stub]
+
+
+Basically every time the function is called the first 34 bytes 
+at its address will self mutate until parameters that you set 
+are met. For example, only writing the stub if the random number
+generated is in between 10 and 15.
+
+One thing I will say, Leave room for your jmp stub. This leaves you
+with 22 valid mutations per stub.
+
+Heres some code:
+
+unsigned char jmpStub[34] = {
+0x90, 0x90,
+0x90, 0x90,
+0x90, 0x90,
+0x90, 0x90,
+0x90, 0x90,
+0x90, 0x90,
+0x90, 0x90,
+0x90, 0x90,
+0x90, 0x90,
+0x90, 0x90,
+0x90, 0x90,
+0x48, 0xB8,                          // mov rax, imm64
+0, 0, 0, 0, 0, 0, 0, 0,              // placeholder
+0xFF, 0xE0,
+};
+
+*(uintptr_t*)&jmpStub[24]  = (uintptr_t)HookFunction;
+
+
+for (int j=0; j < 34; j++) {
+((unsigned char*)thunkData->u1.AddressOfData)[3 + j] = jmpStub[j];
+}
+
+// Dont have to pass any parameters, were in control
+((void(*)())func)();
+
+And the polymorphic version...
+
+// I used this as the first function jumped to
+// Randomly Gets a number in between 0-22
+// Place the placeholder at the random offset
+int myHook() {
+
+unsigned char jmpStub[34] = {
+0x90, 0x90,
+0x90, 0x90,
+0x90, 0x90,
+0x90, 0x90,
+0x90, 0x90,
+0x90, 0x90,
+0x90, 0x90,
+0x90, 0x90,
+0x90, 0x90,
+0x90, 0x90,
+0x90, 0x90,
+0x90, 0x90,
+0x90, 0x90,
+0x90, 0x90,
+0x90, 0x90,
+0x90, 0x90,
+0x90, 0x90,
+};
+
+unsigned char placement[12] = {
+0x48, 0xB8,                          
+0, 0, 0, 0, 0, 0, 0, 0,              
+0xFF, 0xE0,
+};
+
+*(uintptr_t*)&placement[2]  = (uintptr_t)nextFunction;
+
+// Setting jmp stub in random location
+int num = getRandomTime();
+for (int i=0; i < 34; i++) {
+    if (i <= num) continue;
+    for (int p=0; p < 12; p++) {
+        jmpStub[i + p] = placement[p];
+    }
+    break;
+}
+
+Sleep(1000);
+// Mutating the stub
+for (int j=0; j < 34; j++) {
+((unsigned char*)funcAddr)[3 + j] = jmpStub[j];
+}
+
+if (num >= 10 && num <= 18) {
+((void(*)())funcAddr)();
+return 0;
+}
+
+// Recursive
+myHook();
+return 0;
+}
+
+Statitically speaking, not a single stub resides on disk.
+And from a dynamic standpoint, the stub will overwrite the 
+last jmpStub, leaving only either the original stub of the 
+function, or just place C3 at the first byte and have the 
+function return right away.
+
+The Actual jmp that is executed only resides in memory for
+a single iteration, getting swapped out right after execution.
+
+Just make sure you overwrite that final jmp stub after 
+execution once more.
+
+Greetz to all the other Virus writers and researchers out
+there grinding keeping the art alive and a HUGE shoutout 
+to tmp.OUT, SPTH, rgb, billy b, Benny, and the rest 
+of the gang. 
+
+Long live VX ;)
+
+-Sleepy
+
+- See ya!
+
+[EOF]

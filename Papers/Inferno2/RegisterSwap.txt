@@ -1,0 +1,149 @@
+
+
+            Register Roundup
+              Sleepy 2026
+
+
+Awhile back I wrote a x64 assembler that produces
+position-independant code.
+
+It has been awhile and honestly my last implementation
+was spaghetti. I knew I could do better, so I ended up
+writing a new assembler from the ground up.
+
+This time, my goal was to keep it as clean as possible, 
+still spaghetti btw... lol. But something crossed my 
+mind will wiring up some of the modrm bytes.
+
+Each register is known by the cpu as a number, simple. 
+Inside of my assembler I have a struct with the following
+format.
+
+struct RegInfo {
+    const char *name;
+    int num;
+};
+
+struct RegInfo regs[] = {
+    {"rax", 0}, {"rcx", 1}, {"rdx", 2}, {"rbx", 3},
+    {"rsp", 4}, {"rbp", 5}, {"rsi", 6}, {"rdi", 7},
+    {"r8",  8}, {"r9",  9}, {"r10", 10}, {"r11", 11},
+    {"r12", 12}, {"r13", 13}, {"r14", 14}, {"r15", 15},
+};
+
+I thought, what if I randomly swap these register numbers 
+each time machine code is assembled. It actually was trivial
+to turn my normal assembler, into a polymorphic code 
+generator. 
+
+I am going to be going over how I did it.
+
+Well, I have moved on from software based rng and found my 
+prefered way to get true randomness is using hardware rng.
+It all boils down to RDRAND.
+
+If you have never worked with RDRAND, I suggest you give it 
+some light. It produces a 8 byte random key, pulled directly
+from the cpu, each time it is called. Well, we only need a 
+single byte. 
+
+Tip: A single byte can go up to 255 possible combos, 
+but when turned into a 16 bit integer (aka 2 bytes) you get
+255 * 255 possible combos.
+
+int fixRegisters() {
+    for (int i=0; i < 15; i++) {
+        if (strcmp(regs[i].name, "rax") != 0) {
+        regs[i].num = getrand(1, 15);
+        printf("%s %lu\n", regs[i].name, regs->num);
+        }
+    }
+}
+
+This functions randomly chooses a number between 1-15 for all
+registers besides rax. I decided to skip rax for now because 
+my "jump rax" is being used for my shellcode delivery. 
+
+Thats right, shellcode delivery, hot off the press. 
+
+I built this assembler to generate polymorphic assembly stubs
+that will eventually call another shellcode stub. Well I lied, 
+it did not start as that but were going to go with that story.
+
+Once I got the "core" of the assembler down and radomized regs,
+I handed it this asm...
+
+mov rbx, 5
+mov rcx, rbx
+loop:
+add rcx, 1
+cmp rcx, 1000
+jne loop
+lea rbx, [M]
+mov rax, rbx
+jmp rax
+ret
+
+W db "Hello"
+M dq 2000
+
+END
+
+It looks harmless right? but the assembler is actually placing
+my shellcode into 'M' when it is allocated in the first pass.
+
+Being as I like to write my assemblers in 2 pass fashion, the 
+first pass just gets labels and allocations and the second pass
+does the real assembler work.
+
+By the time the assembler starts writing code, the 1st pass has 
+already placed the payload inside 'M'.
+
+The only part that really matters is this, the rest is just for 
+show...
+
+lea rbx, [M] ; load address of 'M' aka shellcode
+mov rax, rbx ; move address into rax so we can jump
+jmp rax      ; jump to shellcode
+
+When I assemble this rbx will be a completly random register, 
+resulting in a mutated modrm each run. But the register value
+stays coonsistent within the session, so if rdx just so happens
+to be rdi this pass, it will be the entire time until the
+assembler shuts down.
+
+I also forgot to mention, I just had my assembler change the 
+memory protections on the newly assembled blob and call it at 
+the entry, which is just the first byte.
+
+I want to give out the full source, but honestly some of the best
+ideas come out of writing an assembler. I suggest you do it by 
+yourself and just do one instruction a day.
+
+If your persistent on the source you can find it on my discord.
+
+Step 2:
+==================================================================
+
+I was experimenting with my assembler and I ended up writing a PEB
+walk on Windows, whats a better test honestly? and wrote up some 
+asm to find KERNEL32's base address. So this snippet will look 
+strange but I will explain.
+
+peb                 ; storing gs:[0x60] into rax (PEB struct base)
+mov rax, [rax+24]   ; LDR (Loaded dll linked list HEAD)
+mov rbx, [rax+16]   ; First DLL .Flink (ntdll.dll)
+mov rax, [rbx]      ; .Flink deref
+mov rbx, rax        ; store .Flink into rbx (Currently ntdll.dll)
+mov rax, [rbx]      ; .Flink again (Now is KERNEL32)
+mov rax, [rax+48]   ; DLL base is at 0x30
+ret                 ; return base address of KERNEL32
+
+When ran in my assembler, this return the correct base address
+of KERNEL32, so that now we can resolve the exported functions 
+of it and resolve a desired function of our choosing.
+
+
+- Sleepy
+
+END

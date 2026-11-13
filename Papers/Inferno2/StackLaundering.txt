@@ -1,0 +1,78 @@
+
+
+            Laundering Stacks
+                 Sleepy
+
+
+For nearly my entire lifetime, virus authors have been
+abusing the stack.
+
+Recently while building my assembler v2, I noticed something
+I could pull off using just 2 instructions.
+
+Normally when someing is reversing a binary, seeing something 
+along the lines of:
+
+mov rax, [rsp+8]
+
+Would make someone say "Okay this person is fetching something 
+from the stack." and allow them to set a breakpoint, dump the 
+stack and check what is at rsp+8.
+
+But what I thought was, what if I store rsp in a non volitile 
+register or even rax before referncing its internals??
+
+It will look like this:
+
+sub rsp, 32
+lea rcx, [P]        ; Loading "calc.exe" from P label
+push rcx            ; push rcx onto stack so rsp+0 is pointer
+mov rax, rsp        ; mov rsp pointer into rax        
+mov rax, [rax]      ; this is rsp+0 mov which is our pointer
+mov rax, [rax]      ; deref pointer which is now a string
+pop rcx             ; pop it out
+add rsp, 32        
+
+There are 2 reasons why I like doing this...
+
+1: stack access obfuscation
+2: No SIB
+
+Even though Zazm, my assembler is capable of handling SIB bytes
+there is a funny story on how I even thought of this idea to 
+begin with.
+
+When building an assembler, you kinda just stumble onto things 
+you havnt even thought of adding yet, which leads into this 
+cycle of adding onto your assembler. I think of building an
+assembler as a 1 instruction a day kind of thing.
+
+Well there was a bug in my line parser for rsp movs. Everytime 
+I did "mov rax, [rsp]" my assembler would crash and output 
+"mov rax, rsp" because the +0 or no displacement caused my 
+assembler to treat [rsp] as a normal mov, not a deref.
+
+So to work around this I thought, let me try "mov rax, [rsp+0]"
+and nope. The assembler still sees 0 as a NULL value. 
+
+I ended up noticing that you can just store the rsp register
+pointer in any register and still treat it like the stack,
+but minus a SIB byte. So technically we are only increasing 
+our binary size by +2 each stack reference. Normally +3 with 
+mov rax, [rax], but because we ditch our SIB byte, we minus 
+1.
+
+Pretty Cool, personally if I was reversing a program and saw:
+
+mov rax, [rsi] or mov rsi, [rsp]
+
+Pretty Cool
+
+Until Next Time...
+
+-Sleepy
+
+[EOF]
+
+
+

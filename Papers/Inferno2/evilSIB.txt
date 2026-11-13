@@ -1,0 +1,99 @@
+
+
+
+           SIB Shuffle
+           Sleepy 2026
+
+
+The SIB byte is one of those obscure corners
+x86. Anything that does either [reg+reg] or 
+accesses [rsp] will need a SIB byte.
+
+While working on my REX encoder awhile back I
+noticed something in the AMD manual that stood
+out to me. It said that instructions that do 
+not require a SIB, it is ignored. 
+
+This stuck with me, only because this means you 
+can mutate the REX prefix of lets say "mov rax, rcx"
+and Get a differnt byte stream.
+
+This is a solid, easy, way to mix up your payload 
+hashes. 
+
+the SIB byte can be built with this shuffle:
+
+ins.SIB = (0 << 6) | (second << 3) | first & 7;
+
+           times      second reg     first reg
+
+For example when storing into [rsp]:
+
+ins.SIB = (0 << 6) | (4 << 3) | 4 & 7;
+
+                     0 index
+
+But where the true alter happens is inside the x64
+only REX prefix.
+
+unsigned char rex = 0x40 | 1 << 3 | base << 2 | tmp << 1 | reg << 0;
+
+                                     r8-r15        SIB      r8-r15
+
+The REX has 4 fields represented in bits per ISA fashion.
+
+The 3rd field "tmp" represents is a instruction has a SIB
+encoding or not.
+
+Well, like I said, the CPU does not care if you flip this bit
+and will execute a non SIB instruction with a SIB bit flipped
+anyways.
+
+I made mine randomly flip SIB bits, that way each run will have 
+a differnt signature.
+
+Here is my REX Builder:
+
+int getmodRM(char* name) {
+
+    for (int j=0; j < 16; j++) {
+        if (strncmp(regs[j].name, name, 3) == 0) {
+            // if register
+            return regs[j].num;
+        }
+    }
+    // else
+    return 0;
+}
+
+unsigned char GetRex(char* line, int isPoly) {
+
+    // I swapped r8 and r9 out bc the string size difference
+    int first = getmodRM(line+4);
+    int second = getmodRM(line+9);
+    
+    int reg = 0;
+    int base = 0;
+    if (first >= 8) {
+    reg = 1;
+    }
+
+    if (second >= 8) {
+    base = 1;
+    }
+
+    // poly rex swap
+    int tmp = 0;
+    if (reg == 0 && base == 0 && isPoly == 1) {
+        tmp = getrand(0,1);
+    }
+    
+    // x64, r8-r15, index, base
+    unsigned char rex = 0x40 | 1 << 3 | base << 2 | tmp << 1 | reg << 0;
+
+    return rex;
+}
+
+- Sleepy
+
+[END]

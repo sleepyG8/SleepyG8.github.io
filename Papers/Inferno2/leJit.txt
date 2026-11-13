@@ -1,0 +1,1398 @@
+=========================================
+               Le Jit
+             Sleepy 2026
+=========================================
+
+SuperLoader
+====================
+
+I hear a lot of talk about encryption and
+obfuscation to try and hide a payload in 
+memory. Well I had a thought cross my mind,
+what if the payload did not exist yet at 
+runtime at all. What if it was just some 
+"plaintext" that just so happens to be asm
+instructions.
+
+Thats where we are heading today.
+
+About a week or so ago I set off to write a 
+64 bit assembler. While writing this I needed
+a solid way to test my code. Well what is better
+for testing my assembled code than running it 
+from memory inside the assembler.
+
+Well this gave me an even better idea. Lets store 
+our assembly, encrypted, into a buffer so later we 
+can assemble it from memory and run it whenever we 
+want to. 
+
+One thing i kept in mind while writing this assembler
+was to keep all memory loads rip relative. By keeping
+everything rip relative, there is 0 issues running the
+assembled code in memory.
+
+Lexor
+======
+
+Starting out I just used the commandline arguments to 
+supply a asm file to assemble. The code ill be providing
+does exactly this. One thing to keep in mind is this is 
+not a full or finished version. But it will get the job 
+done.
+
+Heres a copy of one of my test files so you can make sure 
+yours works:
+
+endI:
+peb
+mov rax, 1
+cmp rax, 1
+add rax, 1
+jz endI
+add rax, 1
+jmp loop           
+add rax, 1
+loop:;              
+lea rax, [w]
+mov rax, [rax+12]
+lea rbx, [w]
+mov rdi, 111
+mov [rbx], rdi
+mov rax, [rbx]
+ret
+
+m dq 25;
+w db "Sleepy"
+p dq 25;
+
+END
+
+There are a couple weird things about the assembler that
+I thought I should bring up. When using a jmp, the label 
+must end with a ';'. Also do not leave any spaces unless 
+it is not code. This version does not handle r8-r15 cry 
+about it. "peb" is a macro for getting peb into rax.
+
+But, nonetheless, it can and will support full asm programs.
+Feel free to upgrade it how you want.
+
+After the file from disk is assembled, its written to a format,
+I did PE for my example, and also executed in memory.
+
+Foreign Exchange
+=================
+
+Encryption often comes a heavy cost, entropy. Entropy can make an 
+encrypted payload stick out like a soar thumb in memory. 
+
+Awhile back I discovered this strange website
+named "forgotten languages". Its a pretty weird site 
+that has been posting daily for almost 20 years. But, 
+if were to take a look at any of these papers, they are 
+not real words, but rather a combination of languages 
+put together.
+
+If you ended up looking into that rabbit whole you will
+see that nothing can be reliably translated 1 for 1 to 
+the real text. Leaving assumptions about what It could be
+talking about.
+
+Well, this gave me an idea. 
+
+Lets create our own "forgotten language" and assemble it.
+
+I ended up creating a makeshift lexor that turns words that
+I made up into assembly instructions. 
+
+heres a sample of the lexor:
+
+C:
+==
+typedef struct codex{
+    char name[8];
+    char enc[1];
+} codex;
+
+struct codex lexor[] = {{"mov", '+'}, {"lea", '8'}, {"add", ')'}, {"cmp", '%'}, {"rbx,", '3'}, {"rdx,", ','}, {"rax,", '2'}, {"700", '1'}, {"rax", "w"}};
+
+Since a Jit - The code
+============
+
+Here is the full source code. Knock yourself out.
+
+C:
+==
+#include <Windows.h>
+#include <stdio.h>
+
+struct RegInfo {
+    const char *name;
+    int num;   // 0–15
+};
+
+struct RegInfo regs[] = {
+    {"rax", 0}, {"rcx", 1}, {"rdx", 2}, {"rbx", 3},
+    {"rsp", 4}, {"rbp", 5}, {"rsi", 6}, {"rdi", 7},
+    {"r8",  8}, {"r9",  9}, {"r10", 10}, {"r11", 11},
+    {"r12", 12}, {"r13", 13}, {"r14", 14}, {"r15", 15},
+};
+
+int getmodRM(char* name) {
+
+    for (int j=0; j < 16; j++) {
+        if (strcmp(regs[j].name, name) == 0) {
+            // if register
+            return regs[j].num;
+        }
+    }
+    // else
+    return 0;
+}
+
+int RexCheck(char* line) {
+    // check for digit after r
+    if (isdigit(line[5])) {
+        // is r8
+        return 1;
+    }
+
+    return 0;
+}
+
+// get mov opcode
+int getOpcode(char* line) {
+    // mov imediate register add cmp
+    if (line[0] == 'm' && line[1] == 'o' && line[2] == 'v' && isdigit(line[9]) || line[0] == 'a' && line[1] == 'd' && line[2] == 'd' && isdigit(line[9]) || line[0] == 'c' && line[1] == 'm' && line[2] == 'p' && isdigit(line[9]) || line[0] == 's' && line[1] == 'u' && line[2] == 'b' && isdigit(line[9])) {
+        return 1;
+    } else if (line[0] == 'm' && line[1] == 'o' && line[2] == 'v' || line[0] == 'x' && line[1] == 'o' && line[2] == 'r' ) {
+        return 2; // mov rax, rax or xor
+    }
+
+    return 0;
+}
+
+int getOpcodeAddr(char* line) {
+    // mov imediate register
+    if (line[9] == '[') {
+        return 1;
+    } 
+    return 0;
+}
+
+int getOpcodeLea(char* line) {
+    // check lea
+    if (line[0] == 'l' && line[1] == 'e' && line[2] == 'a' && line[9] == '[') {
+        return 1;
+    } 
+    return 0;
+}
+
+int getOpcodeWrite(char* line) {
+    if (line[4] == '[') {
+        printf("found\n");
+        return 1;
+    }
+    return 0;
+}
+typedef struct {
+
+    unsigned char REX;
+    unsigned char opcode;
+    unsigned char modRM;
+    unsigned char imm32[4];
+
+
+}Instruction;
+
+Instruction* ins;
+
+unsigned char* printImm32(int imm) {
+    
+    static unsigned char outBuff[3];
+    outBuff[0] = (imm >> 0)  & 0xFF;
+    outBuff[1]= (imm >> 8)  & 0xFF;
+    outBuff[2] = (imm >> 16) & 0xFF;
+    outBuff[3] = (imm >> 24) & 0xFF;
+
+    //printf("%02X %02X %02X %02X\n", outBuff[0], outBuff[1], outBuff[2], outBuff[3]);
+
+    return outBuff;
+}
+
+typedef struct {
+
+    unsigned int rva;
+    char name[25];
+    int size;
+    int location;
+    int rip;
+
+} Data;
+
+Data* dat;
+
+unsigned char code[0x1000];
+int DataStart = 200;
+int incrementor = 0;
+int datTracker = 0;
+int getData(unsigned char* buff) {
+
+    memset(code, 0, 0x1000);
+
+    dat = malloc(5 * sizeof(Data));
+
+    memset(dat, 0, 5 * sizeof(Data));
+
+    for (int i=0; ; i++) {
+
+        // break on END
+        if (buff[i] == 'E' && buff[i+1] == 'N' && buff[i+2] == 'D') break;
+
+        // find db
+        if (buff[i] == 0x64 && buff[i+1] == 0x62) {
+
+            DataStart += 2;
+            dat[datTracker].rva = DataStart;
+
+            for (int p=0; p < 50; p++) {
+                //printf("%c\n", buff[i + p]);
+                code[DataStart++] = buff[i + p + 4];
+                if (buff[i+p+5] == '"') {
+                    code[DataStart++] = 00;
+                    break;
+                }
+            }
+
+            dat[datTracker].name[0] = buff[i - 2];
+            datTracker++;
+            
+
+        }
+
+        // find dq sets mem for now as test
+        if (buff[i] == 0x64 && buff[i+1] == 0x71) {
+            //printf("found dq\n");
+            DataStart += 2;
+
+            dat[datTracker].rva = DataStart;
+            dat[datTracker].name[0] = buff[i - 2];
+            
+            // get num into number buff
+            int tracker = 0;
+            char number[8];
+            for (int p=3; p < 8; p++) {
+                number[tracker++] = buff[i+p];
+                if (number[tracker+1] == ';') {
+                    number[tracker+1] == '\0';
+                    break;
+                }
+            }
+
+            int size = atoi(number);
+ 
+            //printf("size of mem: %lu\n", size);
+
+            dat[datTracker].size = size;
+
+            datTracker++;
+
+            int placeMent = DataStart;
+            code[placeMent++] = 'S';
+            code[placeMent++] = 'L';
+            code[placeMent++] = 'E';
+            code[placeMent++] = 'E';
+            code[placeMent++] = 'P';
+            code[placeMent++] = 'Y';
+
+            DataStart += size;
+        }
+
+        // loop store
+        if (buff[i] == ':') {
+            dat[datTracker].rva = 0; // 0 until found and calculate rip tracker
+            dat[datTracker].name[0] = buff[i-4];
+            dat[datTracker].name[1] = buff[i-3];
+            dat[datTracker].name[2] = buff[i-2];
+            dat[datTracker].name[3] = buff[i-1];
+            datTracker++;
+        }
+
+    }
+
+
+    return 0;
+}
+
+int addCheck(char* line) {
+    if (line[0] == 'a' && line[1] == 'd' && line[2] == 'd') {
+        return 1;
+    }
+    return 0;
+}
+
+int cmpCheck(char* line) {
+    if (line[0] == 'c' && line[1] == 'm' && line[2] == 'p') {
+        return 1;
+    }
+    return 0;
+}
+
+int xorCheck(char* line) {
+    if (line[0] == 'x' && line[1] == 'o' && line[2] == 'r') {
+        return 1;
+    }
+    return 0;
+}
+
+unsigned int ripTracker = 0;
+int Datarva = 0;
+int dontSet = 0;
+unsigned char patchData;
+unsigned char patchJmp;
+int insCount = 0;
+int myfgets(char* buff) {
+    int upUntil = 0;
+    int done = 0;
+    int Total = 0; 
+    // 50 ins Max
+    ins = malloc(sizeof(Instruction) * 50);
+    for (int i=0; i < 50; i++) {
+        ins[i].REX = 00;
+        ins[i].modRM = 00;
+        ins[i].opcode = 00;
+        ins[i].imm32[0] = 00;
+        ins[i].imm32[1] = 00;
+        ins[i].imm32[2] = 00;
+        ins[i].imm32[3] = 00;
+        // finish 0ing these out
+    } 
+
+    for (int i=0; i < 50; i++) {
+        
+        insCount++;
+
+        // zero buff
+        char line[500];
+        for (int r=0; r < 500; r++) {
+            line[r] = 00;
+        }
+
+        // get each line
+        int j;
+        for (j=0; ; j++) {
+            if (buff[j+upUntil] == 00) {
+                done = 1;
+                break;
+            }
+            if (buff[j+upUntil] == '\n') break;
+            line[j] = buff[j+upUntil];
+        }
+
+        upUntil += j+1;
+
+        int skipIt = 0;
+        int isPeb = 0;
+        for (int p=0; ; p++) {
+            if (line[p] == 00) break;
+            if (line[p] == 'E' && line[p+1] == 'N' && line[p+2] == 'D') {
+                return 0;
+            }
+
+            if (line[p] == 'p' && line[p+1] == 'e' &&  line[p+2] == 'b') {
+                ripTracker += 9;
+                ins[i].REX = 0x99;
+                isPeb = 1;
+                skipIt = 1;
+                break;
+            }
+
+            // if loop then skip if : found
+            if (line[p+4] == ':') { 
+                for (int k=0; k < 5; k++) {
+                    if (line[0] == dat[k].name[0] && line[1] == dat[k].name[1] && line[2] == dat[k].name[2] && line[3] == dat[k].name[3]) {
+                        dat[k].rva = ripTracker;
+
+                        //printf("Location: %lu\n", dat[k].location);
+                        if (dat[k].location != 0) {
+                        //printf("location of jz 3rd byte %lu\n", dat[k].location);
+                        //printf("%lu %lu rips\n", ripTracker, dat[k].rip);
+                        code[dat[k].location] = ripTracker - (dat[k].rip);
+
+                        // for (int s=0; s < 50; s++) {
+                        //     printf("%02X ", code[s]);
+                        // }
+                        if (line[p+5] == ';') {
+                        patchJmp = code[dat[k].location];
+                        } else {
+                        patchData = code[dat[k].location];
+                        }
+
+                        //printf("new data: %02X\n", code[dat[k].location]);
+                        dontSet = 1;
+                        }
+
+                    }
+                }
+
+                skipIt = 1; 
+                break;}
+
+        }
+
+        if (skipIt == 1) {
+            if (isPeb == 1) {
+            printf("found peb\n");
+            ins[i].opcode = 00;
+            ins[i].modRM = 00;
+            continue;
+            }
+            ins[i].opcode = 00;
+            ins[i].modRM = 00;
+            ins[i].REX = 00;
+            continue;
+        }
+
+        if (line[0] == 'r' && line[1] == 'e' && line[2] == 't') {
+            ripTracker++;
+            ins[i].opcode = 0xC3;
+            continue;
+        }
+
+        // set rex
+        if (RexCheck(line) == 1) {
+            ins[i].REX = 0x49;
+        }
+
+        if (RexCheck(line) == 0) {
+            ins[i].REX = 0x48;
+        }
+
+        int datLocation = 0;
+        int alrDone = 0;
+
+
+        // if jz
+        if (line[0] == 'j' && line[1] == 'z' || line[0] == 'j' && line[1] == 'm' && line[2] == 'p' || line[0] == 'j' && line[1] == 'm' && line[2] == 'p' || line[0] == 'c' && line[1] == 'a' && line[2] == 'l' && line[3] == 'l') {
+            
+            int tracker = 0;
+            if (line[0] == 'j' && line[1] == 'm' && line[2] == 'p') {
+                ripTracker += 5;
+                ins[i].REX = 00;
+                ins[i].opcode = 0xE9;
+                tracker = 4;
+            } 
+
+            if (line[0] == 'c' && line[1] == 'a' && line[2] == 'l' && line[3] == 'l') {
+                ripTracker += 5;
+                ins[i].REX = 00;
+                ins[i].opcode = 0xE8;
+                tracker = 5;
+            } 
+
+            if (line[0] == 'j' && line[1] == 'z') {
+                ripTracker += 6;
+                ins[i].REX = 0x0F;
+                ins[i].opcode = 0x84;
+                tracker = 3;
+            } 
+
+            int isLabel = 0;
+            int isBlank = 0;
+            int newNum = 0;
+            // for labels only
+            for (int p=0; p < 3; p++) {
+                // if label is found from the first data walk
+    
+                //printf("name: %c %c %c\n", line[tracker], line[tracker+1], line[tracker+2]);
+                if (line[tracker] == dat[p].name[0] && line[tracker+1] == dat[p].name[1] && line[tracker+2] == dat[p].name[2] && line[tracker+3] == dat[p].name[3]) {
+
+                    isLabel = 1;
+
+                    if (dat[p].rva == 0) {
+                        ins[i].imm32[0] = 00;
+                        ins[i].imm32[1] = 00;
+                        ins[i].imm32[2] = 00;
+                        ins[i].imm32[3] = 00;
+                        dat[p].location = ripTracker - 4;
+                        dat[p].rip = ripTracker;
+                        //printf("set location\n");
+                        isBlank = 1;
+                    } else {
+                    newNum = dat[p].rva;
+                    }
+                } 
+            }
+
+            if (isBlank == 1) {
+                continue;
+            }
+
+            // fallback to num if label is still 0
+            if (isLabel == 0) {
+            unsigned char num[8];
+            int p;
+            for (p=0; p < 8; p++) {
+                if (line[3+p] == 00) break;
+                num[p] = line[3+p];
+            }
+
+            num[p] = '\0';
+
+            newNum = atoi(num);
+
+            unsigned char* finalDisp = printImm32(0x1000 + newNum);
+
+            ins[i].imm32[0] = finalDisp[0];
+            ins[i].imm32[1] = 00;
+            ins[i].imm32[2] = 00;
+            ins[i].imm32[3] = 00;
+            continue;
+            }
+
+            //printf("number: %lu\n", newNum);
+
+            
+            unsigned int dataRva = 0x1000 + newNum;
+            unsigned int nextRip = 0x1000 + ripTracker;      // RIP after instruction
+
+            //printf("data: %lu nextRip: %lu ripTracker %lu\n", dataRva, nextRip, ripTracker);
+            unsigned int disp = dataRva - (unsigned int)nextRip;
+
+            //printf("disp: %lu\n", disp);
+            unsigned char* finalDisp = printImm32(disp);
+
+            //printf("final disp %02X\n", finalDisp);
+
+            //printf("%02X %02X %02X %02X\n", finalDisp[0], finalDisp[1], finalDisp[2], finalDisp[3]);
+
+            ins[i].imm32[0] = finalDisp[0];
+            ins[i].imm32[1] = finalDisp[1];
+            ins[i].imm32[2] = finalDisp[2];
+            ins[i].imm32[3] = finalDisp[3];
+            
+            continue;
+
+
+        }
+        
+        // for writes
+        if (getOpcodeWrite(line) == 1) {
+
+            if (line[8] == '+') {
+            ripTracker += 7;
+            printf("plus found\n");
+            char numberBuff[3];
+            numberBuff[0] = line[9];    
+            
+            //printf("%s\n", numberBuff);
+
+            int finalNum = atoi(numberBuff);
+
+            printf("%lu\n", finalNum);
+            unsigned char* finalDisp = printImm32(finalNum);
+
+            ins[i].opcode = 0x89;   // cpy opcode
+            char first[4];
+            first[0] = line[5];
+            first[1] = line[6];
+            first[2] = line[7];
+            first[3] = 00;
+
+            char second[9];
+            second[0] = line[13];
+            second[1] = line[14];
+            second[2] = line[15];
+            second[3] = 00;
+
+            int num = getmodRM(first);
+            int reg = getmodRM(second);
+
+            printf("%lu %lu\n", reg, num);
+            ins[i].modRM = 0x80 | ((reg & 7) << 3) | (num & 7);
+
+            printf("%02X\n", ins[i].modRM);
+
+            ins[i].imm32[0] = finalNum;
+            ins[i].imm32[1] = 00;
+            ins[i].imm32[2] = 00;
+            ins[i].imm32[3] = 00;
+
+            continue;
+            }
+
+            ripTracker += 3;
+            ins[i].opcode = 0x89;   // cpy opcode
+            char first[4];
+            first[0] = line[5];
+            first[1] = line[6];
+            first[2] = line[7];
+            first[3] = 00;
+
+            char second[9];
+            second[0] = line[11];
+            second[1] = line[12];
+            second[2] = line[13];
+            second[3] = 00;
+
+            int num = getmodRM(first);
+            int reg = getmodRM(second);
+
+            printf("%lu %lu\n", reg, num);
+            ins[i].modRM = 00 | ((reg & 7) << 3) | (num & 7);
+
+            printf("%02X\n", ins[i].modRM);
+            ins[i].imm32[0] = 0;
+
+            continue;
+        }
+
+        // load addr mov, [rax] rip relative loads
+        if (getOpcodeAddr(line) == 1) {
+            //printf("setting addr\n");
+            ins[i].opcode = 0x8B;   // mov address opcode
+            
+            if (line[0] == 0x6C && line[1] == 0x65 && line[2] == 0x61) {
+                //puts("lea set");
+                ins[i].opcode = 0x8D;   // lea opcode
+            }
+
+            //ripTracker += 7;
+            char first[9];
+            first[0] = line[10];
+            first[1] = line[11];
+            first[2] = line[12];
+            first[3] = 00;
+
+            char second[10];
+            second[0] = line[4];
+            second[1] = line[5];
+            second[2] = line[6];
+            second[3] = 00;
+
+            for (int h=0; h < 5; h++) {
+
+                // for [words]
+                if (dat[h].name[0] == line[10]) {
+                    ripTracker += 7;
+                    //printf("Setting dat\n");
+                    datLocation = dat[h].rva;
+                    //printf("dat rva %lu\n", datLocation);
+                    break;
+                }
+
+                // for [rax]
+                for (int p=0; p < 16; p++) {
+                        //check second register if its in table
+                        if (line[10] == regs[p].name[0] && line[11] == regs[p].name[1] && line[12] == regs[p].name[2]) {
+                        ripTracker += 3;
+                        datLocation = 0;
+                        int num = getmodRM(first);
+                        int reg = getmodRM(second);
+
+                       // printf("num: %lu\n", num);
+
+                       // printf("reg: %lu\n", reg);
+
+                        //printf("%c\n", line[13]);
+
+                        // displacements
+                        if (line[13] == 0x2B) {
+                            ripTracker += 1;
+                            int counter = 0;
+                            unsigned char number[4];
+                            number[counter++] = line[14];
+                            if (isdigit(line[15])) {
+                            number[counter++] = line[15];
+                            }
+                            if (isdigit(line[16])) {
+                            number[counter++] = line[16];
+                            }
+                            if (isdigit(line[17])) {
+                            number[counter++] = line[17];
+                            }
+
+                            // printf("num: %s\n", second);
+                            // printf("num num %lu\n", reg);
+                            // printf("reg: %s\n", first);
+                            // printf("reg num %lu\n", num);
+
+                            number[counter++] = '\0';
+
+                            int newNumber = atoi(number);
+
+                            unsigned char modRM = (1 << 6) | ((reg & 7) << 3) | (num & 7);
+
+                            ins[i].modRM = modRM;
+
+                            ins[i].imm32[0] = newNumber;
+
+                            alrDone = 1;
+                            break;
+
+                        }
+
+                        unsigned char modRM = (reg & 7) << 3 | (num & 7);
+                        ins[i].modRM = modRM;
+                        alrDone = 1;
+                        break;
+                    }
+                }
+
+                if (alrDone == 1) break;
+
+            }
+
+            if (alrDone == 1) continue;
+
+            // for imediates
+            int num = getmodRM(second);
+
+            unsigned char modRM = (num & 7) << 3 | 0x05;
+
+            ins[i].modRM = modRM;
+
+            // Placing data
+            // code[59] = 'h';
+            // code[60] = 'i';
+            // code[61] = '\0';
+
+            // // Setting RIP n data RVAs
+            // DWORD rip = (0x1000 + 20);
+            // printf("Setting RIP %p\n", rip);
+            // DWORD nextRip = (unsigned char*)rip + 7;
+            // // data is at 
+            // DWORD data = (0x1000 + 59);
+
+            // int disp = data - nextRip;
+
+            //unsigned int rip = 0x1000 + 10;      // RVA of instruction
+            unsigned int nextRip = 0x1000 + ripTracker;      // RIP after instruction
+
+            
+            if (datLocation != 0) {
+
+            //printf("dat location: %lu!\n", datLocation);
+
+            unsigned int data = 0x1000 + datLocation;     // RVA of your "hi" string
+
+            unsigned int disp = (unsigned int)data - (unsigned int)nextRip;
+
+            unsigned char* finalDisp = printImm32(disp);
+
+            //printf("%02X %02X %02X %02X\n", finalDisp[0], finalDisp[1], finalDisp[2], finalDisp[3]);
+
+            ins[i].imm32[0] = finalDisp[0];
+            ins[i].imm32[1] = finalDisp[1];
+            ins[i].imm32[2] = finalDisp[2];
+            ins[i].imm32[3] = finalDisp[3];
+            }
+            continue;
+        }
+
+        // imediates
+        if (getOpcode(line) == 1) {
+            ins[i].opcode = 0xC7;
+            
+            // Advance rip Tracker
+            ripTracker += 7;
+
+            char first[4];
+            first[0] = line[4];
+            first[1] = line[5];
+            first[2] = line[6];
+            first[3] = 00;
+
+            char second[9];
+            second[0] = line[10];
+            second[1] = line[11];
+            second[2] = line[12];
+            second[3] = 00;
+        
+            // get modRM
+
+            //printf("%s\n", first);
+            int num = getmodRM(first);
+            int reg = getmodRM(second);
+            
+            unsigned char modRM = 00;
+            if (line[0] == 's' && line[1] == 'u' && line[2] == 'b') {
+                modRM = 0xC0 | (5 << 3) | (num & 7);
+            } else {
+                // for add and mov
+                modRM = 0xC0 | (num & 7);
+            }
+
+            ins[i].modRM = modRM;
+
+            //10,000 max
+            unsigned char numberBuff[6];
+            //printf("num size: %lu\n", j - 9);
+            for (int k=0; k < (j-9); k++) {
+                if (line[9+k] == 0) break;
+                numberBuff[k] = line[9+k];
+            }
+
+            numberBuff[j-9] = '\0'; 
+            //printf("%s\n", numberBuff);
+
+            int finalNum = atoi(numberBuff);
+
+            // re set if add is found only using general opcode no extention
+            if (addCheck(line) == 1) {
+            ins[i].opcode = 0x81; // add opcode for rax
+            } 
+
+            if (cmpCheck(line) == 1) {
+                ripTracker -= 1;
+                if (first[0] == 'r' && first[1] == 'a' && first[2] == 'x') {
+                ins[i].opcode = 0x3D;
+                ins[i].modRM = 0;
+                
+                printf("final: %lu\n", finalNum);
+                }   
+            }
+
+            // sub for imediates    
+            if (line[0] == 's' && line[1] == 'u' && line[2] == 'b') {
+                //printf("mod: %02X\n", ins[i].modRM);
+                ripTracker -= 3;
+                ins[i].opcode = 0x83;
+                
+            }
+
+            //printf("%02X\n", ins[i].opcode);
+            //printf("finalNum: %lu\n", finalNum);
+        
+            unsigned char* immStore = printImm32(finalNum);
+
+            ins[i].imm32[0] = immStore[0];
+            ins[i].imm32[1] = immStore[1];
+            ins[i].imm32[2] = immStore[2];
+            ins[i].imm32[3] = immStore[3];
+
+            //printf("wow: %02X %02X %02X %02X\n", ins[i].imm32[0], ins[i].imm32[1], ins[i].imm32[2], ins[i].imm32[3]);
+
+            //printf("%lu\n", line[9]);
+
+
+
+        } 
+
+        // for mov rax, rbx and cmp
+        if (getOpcode(line) == 2) {
+            ins[i].opcode = 0x89;
+            
+            ripTracker += 3;
+            // first
+            char first[4];
+            first[0] = line[4];
+            first[1] = line[5];
+            first[2] = line[6];
+            first[3] = 00;
+
+            // second
+            char sec[4];
+            sec[0] = line[9];
+            sec[1] = line[10];
+            sec[2] = line[11];
+            sec[3] = 00;
+            
+            int rd = getmodRM(first);
+            int rs = getmodRM(sec);
+
+            if (xorCheck(line) == 1) {
+                ins[i].opcode = 0x31;
+            }
+
+            unsigned char modRM = 0xC0 | ((rs & 7) << 3) | (rd & 7);
+
+            ins[i].modRM = modRM;
+
+            //printf("codes: %02X %02X %02X\n", ins[i].REX, ins[i].opcode, ins[i].modRM);
+
+        }
+
+        //printf("tracker instruction #%lu %lu\n", i, ripTracker);
+    }
+
+}
+
+typedef struct _SIMAGE_DOS_HEADER {
+    unsigned short e_magic;      // 00h: Magic number "MZ"
+    unsigned short e_cblp;       // 02h: Bytes on last page of file
+    unsigned short e_cp;         // 04h: Pages in file
+    unsigned short e_crlc;       // 06h: Relocations
+    unsigned short e_cparhdr;    // 08h: Size of header in paragraphs
+    unsigned short e_minalloc;   // 0Ah: Minimum extra paragraphs needed
+    unsigned short e_maxalloc;   // 0Ch: Maximum extra paragraphs needed
+    unsigned short e_ss;         // 0Eh: Initial (relative) SS value
+    unsigned short e_sp;         // 10h: Initial SP value
+    unsigned short e_csum;       // 12h: Checksum
+    unsigned short e_ip;         // 14h: Initial IP value
+    unsigned short e_cs;         // 16h: Initial (relative) CS value
+    unsigned short e_lfarlc;     // 18h: File address of relocation table
+    unsigned short e_ovno;       // 1Ah: Overlay number
+    unsigned short e_res[4];     // 1Ch: Reserved words
+    unsigned short e_oemid;      // 24h: OEM identifier
+    unsigned short e_oeminfo;    // 26h: OEM information
+    unsigned short e_res2[10];   // 28h: Reserved words
+    unsigned int   e_lfanew;     // 3Ch: File offset to PE header
+} SIMAGE_DOS_HEADER;
+
+typedef struct _SIMAGE_DATA_DIRECTORY {
+    unsigned long   VirtualAddress;
+    unsigned long   Size;
+} SIMAGE_DATA_DIRECTORY, *SPIMAGE_DATA_DIRECTORY;
+
+typedef struct _SIMAGE_OPTIONAL_HEADER64 {
+    unsigned short        Magic;
+    unsigned char        MajorLinkerVersion;
+    unsigned char        MinorLinkerVersion;
+    unsigned long       SizeOfCode;
+    unsigned long       SizeOfInitializedData;
+    unsigned long       SizeOfUninitializedData;
+    unsigned long       AddressOfEntryPoint;
+    unsigned long       BaseOfCode;
+    unsigned long long   ImageBase;
+    unsigned long       SectionAlignment;
+    unsigned long       FileAlignment;
+    unsigned short        MajorOperatingSystemVersion;
+    unsigned short        MinorOperatingSystemVersion;
+    unsigned short        MajorImageVersion;
+    unsigned short        MinorImageVersion;
+    unsigned short        MajorSubsystemVersion;
+    unsigned short        MinorSubsystemVersion;
+    unsigned long       Win32VersionValue;
+    unsigned long       SizeOfImage;
+    unsigned long       SizeOfHeaders;
+    unsigned long       CheckSum;
+    unsigned short        Subsystem;
+    unsigned short        DllCharacteristics;
+    unsigned long long   SizeOfStackReserve;
+    unsigned long long   SizeOfStackCommit;
+    unsigned long long   SizeOfHeapReserve;
+    unsigned long long   SizeOfHeapCommit;
+    unsigned long       LoaderFlags;
+    unsigned long       NumberOfRvaAndSizes;
+    SIMAGE_DATA_DIRECTORY DataDirectory[16];
+} SIMAGE_OPTIONAL_HEADER64, *SPIMAGE_OPTIONAL_HEADER64;
+
+typedef struct _SIMAGE_FILE_HEADER {
+    unsigned short Machine;              // 0x8664 for x64
+    unsigned short NumberOfSections;     // count of section headers
+    unsigned long  TimeDateStamp;        // can be 0
+    unsigned long  PointerToSymbolTable; // must be 0 for PE
+    unsigned long  NumberOfSymbols;      // must be 0 for PE
+    unsigned short SizeOfOptionalHeader; // sizeof(IMAGE_OPTIONAL_HEADER64)
+    unsigned short Characteristics;      // flags (e.g., 0x2022)
+} SIMAGE_FILE_HEADER;
+
+typedef struct _SIMAGE_NT_HEADERS64 {
+    unsigned long Signature;
+    SIMAGE_FILE_HEADER FileHeader;
+    SIMAGE_OPTIONAL_HEADER64 OptionalHeader;
+} SIMAGE_NT_HEADERS64, *SPIMAGE_NT_HEADERS64;
+
+typedef struct _SIMAGE_SECTION_HEADER {
+    unsigned char    Name[8];
+    union {
+            unsigned long   PhysicalAddress;
+            unsigned long   VirtualSize;
+    } Misc;
+    unsigned long   VirtualAddress;
+    unsigned long   SizeOfRawData;
+    unsigned long   PointerToRawData;
+    unsigned long   PointerToRelocations;
+    unsigned long   PointerToLinenumbers;
+    unsigned short    NumberOfRelocations;
+    unsigned short    NumberOfLinenumbers;
+    unsigned long   Characteristics;
+} SIMAGE_SECTION_HEADER, *SPIMAGE_SECTION_HEADER;
+
+typedef struct _SIMAGE_DOS_STUB { unsigned char data[64]; } SIMAGE_DOS_STUB;
+
+typedef struct _SIMAGE_EXPORT_DIRECTORY {
+    DWORD   Characteristics;
+    DWORD   TimeDateStamp;
+    WORD    MajorVersion;
+    WORD    MinorVersion;
+    DWORD   Name;
+    DWORD   Base;
+    DWORD   NumberOfFunctions;
+    DWORD   NumberOfNames;
+    DWORD   AddressOfFunctions;     // RVA from base of image
+    DWORD   AddressOfNames;         // RVA from base of image
+    DWORD   AddressOfNameOrdinals;  // RVA from base of image
+} SIMAGE_EXPORT_DIRECTORY, *PSIMAGE_EXPORT_DIRECTORY;
+
+typedef struct outFormat {
+    SIMAGE_DOS_HEADER mz;
+    char reserved[64];     
+    SIMAGE_NT_HEADERS64 nt;
+    SIMAGE_SECTION_HEADER sh[2];
+} outFormat;
+
+outFormat* out;
+
+typedef struct codex{
+    char name[8];
+    char enc[1];
+} codex;
+
+struct codex lexor[] = {{"mov", '+'}, {"lea", '8'}, {"add", ')'}, {"cmp", '%'}, {"rbx,", '3'}, {"rdx,", ','}, {"rax,", '2'}, {"700", '1'}, {"rax", "w"}};
+
+int decodeText(unsigned char* buff, int size) {
+
+    int upUntil = 0;
+    for (int i=0; i < 10; i++) {
+        // zero buff
+        char line[150];
+        for (int r=0; r < 150; r++) {
+            line[r] = 0x00;
+        }
+
+        // get each line
+        int j;
+        for (j=0; ; j++) {
+            if (buff[j+upUntil] == '\n') break;
+            line[j] = buff[j+upUntil];
+        }
+
+        upUntil += j+1;
+
+        printf("Line %lu\n", i);
+        printf("%s\n", &line);
+        for (int p=0; p < 10 ; p++) {
+            if (line[p] == 00) break;
+            if (strcmp(&line, "END") == 0) {
+                printf("ending\n");
+                return 0;
+            }
+
+            for (int m=0; m < 9; m++) {
+            if (line[p] == lexor[m].name[0] && line[p+1] == lexor[m].name[p+1] && line[p+2] == lexor[m].name[p+2]) {
+                //printf("Match found\n");
+                printf("%s - %c\n", &line, lexor[m].enc[0]);
+            }
+            }
+
+        }
+}
+
+}
+
+int BUILDPEFILE(char* fileName, int sizeOfData, unsigned char* code, int offsetOfEntry, int makeData) {
+
+    FILE* f = fopen(fileName, "wb");
+
+    char filler[0x1000];
+    out = (outFormat*)filler;
+
+    unsigned char buffer[4096];
+
+    // cleanliness
+    for (int i=0; i < sizeof(outFormat); i++) {
+        ((unsigned char*)out)[i] = 0;
+    }
+
+    for (int i=0; i < sizeof(buffer); i++) {
+        buffer[i] = 0;
+    }
+
+    // DOS HEADER
+    out->mz.e_magic = 0x5A4D;
+    out->mz.e_lfanew = 0x80;
+
+    // FILE HEADER
+    out->nt.FileHeader.Characteristics = 0x0022;
+    out->nt.FileHeader.Machine = 0x8664;
+    out->nt.FileHeader.NumberOfSections = 1;
+    out->nt.FileHeader.NumberOfSymbols = 0;
+    out->nt.FileHeader.PointerToSymbolTable = 0;
+    out->nt.FileHeader.SizeOfOptionalHeader = sizeof(SIMAGE_OPTIONAL_HEADER64);
+    out->nt.FileHeader.TimeDateStamp = 0;
+
+    // OPTIONAL HEADER
+    out->nt.Signature = 0x00004550; // PE
+    out->nt.OptionalHeader.Magic = 0x20B;
+    out->nt.OptionalHeader.ImageBase = 0x140000000;
+    out->nt.OptionalHeader.AddressOfEntryPoint = 0x1000 + offsetOfEntry; // start of .text
+    out->nt.OptionalHeader.SectionAlignment = 0x1000;
+    out->nt.OptionalHeader.FileAlignment = 0x200;
+    out->nt.OptionalHeader.SizeOfImage = 0x6000;        // change
+    out->nt.OptionalHeader.SizeOfHeaders = 0x400;
+
+    out->nt.OptionalHeader.NumberOfRvaAndSizes = 16;
+    out->nt.OptionalHeader.Subsystem = 3; 
+    out->nt.OptionalHeader.SizeOfCode = out->sh->SizeOfRawData; 
+    out->nt.OptionalHeader.SizeOfInitializedData = 0; 
+    out->nt.OptionalHeader.SizeOfUninitializedData = 0;
+    out->nt.OptionalHeader.MajorSubsystemVersion = 4; 
+    out->nt.OptionalHeader.MinorSubsystemVersion = 0;
+
+    // SECTION HEADER
+    out->sh->PointerToRawData = 0x400; // .text
+    out->sh->SizeOfRawData = sizeOfData;
+    out->sh->VirtualAddress = 0x1000;
+    // out->sh->Characteristics = 0x20000000 |  0x40000000 | 0x00000020;
+    out->sh->Characteristics = 0xE0000020;
+    out->sh->Misc.VirtualSize = sizeOfData;
+
+    int sectionHeaderOffset = out->mz.e_lfanew + 4 + sizeof(SIMAGE_FILE_HEADER) + sizeof(SIMAGE_OPTIONAL_HEADER64);
+    
+    // section name
+    out->sh->Name[0] = '.';
+    out->sh->Name[1] = 't';
+    out->sh->Name[2] = 'e';
+    out->sh->Name[3] = 'x';
+    out->sh->Name[4] = 't';
+
+    SIMAGE_DATA_DIRECTORY dir;
+    SIMAGE_EXPORT_DIRECTORY exp;
+    if (makeData == 2) {
+    dir.VirtualAddress = 480;
+    dir.Size = sizeof(SIMAGE_EXPORT_DIRECTORY);
+    exp.Name = 600;
+    exp.NumberOfFunctions = 1;
+    exp.Base = 480;
+    exp.NumberOfNames = 1;
+    exp.AddressOfFunctions = 500;
+    exp.AddressOfNames = 490;
+    out->nt.OptionalHeader.DataDirectory[0] = dir;
+    exp.AddressOfNameOrdinals = 510;
+    }
+
+    if (makeData == 1) {
+    out->sh[1].PointerToRawData = 0x400 + sizeOfData + 50; // .text
+    out->sh[1].SizeOfRawData = 100;
+    out->sh[1].VirtualAddress = 0x2000;
+    out->sh[1].Characteristics = 0x20000000 |  0x40000000 | 0x00000020;
+    out->sh[1].Misc.VirtualSize = 100;
+
+    int sectionHeaderOffset2 = out->mz.e_lfanew + 4 + sizeof(SIMAGE_FILE_HEADER) + sizeof(SIMAGE_OPTIONAL_HEADER64) + sizeof(SIMAGE_SECTION_HEADER);
+    
+    // section name
+    out->sh[1].Name[0] = '.';
+    out->sh[1].Name[1] = 'd';
+    out->sh[1].Name[2] = 'a';
+    out->sh[1].Name[3] = 't';
+    out->sh[1].Name[4] = 'a';
+    }
+
+
+    /*
+    for (int i=0; i < 64; i++) {
+        buffer[i] = ((unsigned char*)(&out->mz))[i];
+    }
+
+    for (int i=0; i < sizeof(SIMAGE_NT_HEADERS64); i++) {
+        buffer[out->mz.e_lfanew + i] = ((unsigned char*)&out->nt)[i];
+    }
+
+    for (int i=0; i < sizeof(SIMAGE_SECTION_HEADER); i++) {
+        buffer[sectionHeaderOffset + i] = ((unsigned char*)&out->sh)[i]; 
+    }
+
+    for (int i=0; i < hexSize; i++) {
+        buffer[out->sh->PointerToRawData + i] = ((unsigned char*)Tired)[i];
+    }
+
+    
+      This is for writing the buffer
+       fwrite(buffer, sizeof(buffer), 1, f);
+    */
+
+    unsigned char fillerbytes[500];
+
+    for (int i=0; i<500; i++) {
+        fillerbytes[i] = '*';
+        fillerbytes[i+1] = ':';
+        fillerbytes[i+2] = ')';
+        i += 2;
+    }
+
+    // This is for writing directly from struct and data (Cleaner)
+    fwrite(out, sizeof(outFormat), 1, f);
+    fseek(f, out->sh->PointerToRawData, 0);
+    fwrite(code, out->sh->SizeOfRawData, 1, f);
+    fwrite(fillerbytes, 500, 1, f);
+
+    if (makeData == 1) {
+    fseek(f, out->sh[1].PointerToRawData, 0);
+    fwrite("Made with Love\n", 1, 15, f);
+    }
+
+    fclose(f);
+
+    return 0;
+
+} 
+
+int constructBytes(int Size, char* name) {
+
+    int offset = 0;
+    for (int i=0; i < insCount; i++) {
+
+        // C3
+        if (ins[i].opcode == 0xC3) {
+            code[offset++] = 0xC3;
+            continue;
+        }
+
+        // peb
+        if (ins[i].REX == 0x99) {
+            code[offset++] = 0x65;
+            code[offset++] = 0x48;
+            code[offset++] = 0x8B;
+            code[offset++] = 0x04;
+            code[offset++] = 0x25;
+            code[offset++] = 0x60;
+            code[offset++] = 00;
+            code[offset++] = 00;
+            code[offset++] = 00;
+            continue;
+        }
+
+        // for cmp
+        if (ins[i].opcode == 0x3D) {
+            code[offset++] = ins[i].REX;
+            code[offset++] = ins[i].opcode;
+            code[offset++] = ins[i].imm32[0];
+            code[offset++] = ins[i].imm32[1];
+            code[offset++] = ins[i].imm32[2];
+            code[offset++] = ins[i].imm32[3];
+            continue;
+        }
+       
+        // for sub rax, 1 imediates defaults to rax fast path
+        if (ins[i].opcode == 0x2D || ins[i].opcode == 0x83) {
+
+            // for not rax registers 0x83 is the opcode
+            if (ins[i].opcode == 0x83) {
+            code[offset++] = ins[i].REX;
+            code[offset++] = ins[i].opcode;
+            code[offset++] = ins[i].modRM;
+            code[offset++] = ins[i].imm32[0];
+            continue; 
+            }
+
+            code[offset++] = ins[i].REX;
+            code[offset++] = ins[i].opcode;
+            code[offset++] = ins[i].imm32[0];
+            code[offset++] = ins[i].imm32[1];
+            code[offset++] = ins[i].imm32[2];
+            code[offset++] = ins[i].imm32[3];
+            continue;
+        }
+
+        if (ins[i].opcode == 0xE9 || ins[i].opcode == 0xE8) {
+            code[offset++] = ins[i].opcode;    
+            if (patchJmp != 0) {
+            code[offset++] = patchJmp;
+            code[offset++] = 00;
+            code[offset++] = 00;
+            code[offset++] = 00;
+            continue;
+            }
+            code[offset++] = ins[i].imm32[0];  
+            code[offset++] = 0xFF;
+            code[offset++] = 0xFF;
+            code[offset++] = 0xFF;
+            continue;
+        }
+
+        // skip for 00 data. This includes labels
+        if (ins[i].REX == 00 || ins[i].opcode == 00) continue;
+
+        // Writing values and dont write if 0
+        if (ins[i].REX != 0) {
+        code[offset++] = ins[i].REX;
+        }
+
+        // set opcode at next code[offset]
+        code[offset++] = ins[i].opcode;
+
+        // tmp jmp 
+        if (ins[i].REX == 0x0F) {
+            //printf("printing jz\n");
+            //printf("%02X %02X %02X %02X\n", ins[i].imm32[0], ins[i].imm32[1], ins[i].imm32[2], ins[i].imm32[3]);
+            // dont set if already patched
+            if (dontSet == 1) {
+            code[offset++] = patchData;
+            code[offset++] = ins[i].imm32[1];
+            code[offset++] = 00;
+            code[offset++] = 00;
+            continue;
+            }
+            code[offset++] = ins[i].imm32[0];
+            code[offset++] = 0xFF;
+            code[offset++] = 0xFF;
+            code[offset++] = 0xFF;
+            continue;
+        } 
+
+        // if is not call set modRM because of format
+        if (ins[i].modRM != 0x2D) {
+        code[offset++] = ins[i].modRM;
+        }
+
+        // imm32 added writing the imm for cmp
+        if (ins[i].imm32[0] != 00) {
+        code[offset++] = ins[i].imm32[0];
+        // only do if imm is needed
+        if (ins[i].opcode != 0x8B) {
+        code[offset++] = ins[i].imm32[1];
+        code[offset++] = ins[i].imm32[2];
+        code[offset++] = ins[i].imm32[3];
+        }
+        }
+    }
+
+    for (int i=0; i < 100; i++) {
+        printf("%02X ", code[i]);
+    }
+
+    printf("\nBuilding a PE\n");
+    BUILDPEFILE(name, Size, code, 0, 0);
+
+    printf("Calling Directly\n");
+    unsigned long* old;
+    VirtualProtect(code, Size, 0x40, &old);
+    ((void(*)())code)(); 
+    return 0;
+}
+
+int main(int argc, char* argv[]) {
+
+    FILE* f = fopen(argv[1], "r+");
+
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    char* buff = malloc(size);
+    fread(buff, 1, size, f);
+
+    buff[size] = '\0';
+
+   // decodeText(buff, size);
+
+    // Get Data
+    getData(buff);
+
+    // Assembler
+    myfgets(buff);
+
+    // Build PE
+    constructBytes(sizeof(code), "assembler2.exe");
+
+    printf("Code checked, your good!\n");
+    return 0;
+}
+
+Heres to building and breaking things
+
+Thx for reading, nerds :) 
+
+[END]
