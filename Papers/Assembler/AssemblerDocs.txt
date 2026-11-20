@@ -215,9 +215,58 @@ You can add your own code into the inc file with
 programs written in Zazm. There will be some 
 included files as well to get you started.
 
+sub rsp, 32
+store "Hello World" 00 
+add rsp, 32
+
+This ^^ will store whatever string is given on the
+stack at offset 00.
+
+You can edit the offset param but keep in mind, you 
+are responsible for now overflowing.
+
+TIP: If you overflow the stack and are running in jit 
+mode, it will pop an exception in the terminal for you.
+
+
 Functions:
 =======================================
 
+Jit execution:
+On windows... Zazm builds an "import table" in
+the data sections. Really all it is doing is 
+storing the address of needed functions right 
+alongside other data.
+
+A gf GetProcAddress
+
+and reference As address with:
+
+mov rax, [A]  ; rax now is 0x00007FF whatever
+
+Binaries:
+For Binaries you have options.
+
+On windows you can resolve functions yourself for
+right now, and in the future I MAY include a built in
+inlined PEB walk.
+
+On Linux just use syscalls. I have provided plenty of 
+examples under the "test" folder to get you started.
+
+Calls:
+=========================================================
+
+stack allocation can be tedious... Well Zazm comes with 
+some quality of life features to make your day better.
+
+call(32)
+
+This assembles into:
+
+sub rsp, 32
+call rax
+add rsp, 32
 
 
 
